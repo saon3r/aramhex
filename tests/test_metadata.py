@@ -74,6 +74,8 @@ def test_parse_champions_normalized_and_rejects_bad_records():
     zh = I18N["heroes"]["103"]["zh_CN"]
     assert a["name"] == zh[1] == "阿狸" and a["nick"] == zh[0] == "九尾妖狐"
     assert a["name"] != a["name_en"]
+    # 搜索关键词：英文 alias/名/称号都在，中文名字另有字段
+    assert "Ahri" in a["keywords"] and "the Nine-Tailed Fox" in a["keywords"]
     assert payload == before
 
 
@@ -173,8 +175,15 @@ def test_parse_augments_normalizes_and_keeps_english_separate():
     assert out["1002"]["rarity"] == "gold"
     assert out["1002"]["icon"].endswith("/apex.png")
     assert out["999999"] == {"id": "999999", "name": "", "name_en": "Mystery", "rarity": "unknown",
-                             "desc": "Gain power.", "icon": "", "modes": []}
+                             "desc": "Gain power.", "icon": "", "modes": [], "new": False}
     assert payload == before
+
+
+def test_parse_augments_can_pin_modes_and_new_flags_for_the_store():
+    out = metadata.parse_augments([_augment(1001), _augment(1002)], {"1001", "1002"},
+                                 modes=("KIWI",), new_ids={"1002"})
+    assert out["1001"]["modes"] == ["KIWI"] and out["1001"]["new"] is False
+    assert out["1002"]["modes"] == ["KIWI"] and out["1002"]["new"] is True
 
 
 def test_parse_augments_selects_by_active_id_not_aram_or_kiwi_heuristic():
@@ -273,6 +282,13 @@ def test_display_fallbacks_are_neutral_and_never_chinese():
     assert metadata.display_hero_title(999999) == ""
     assert not CJK.search(metadata.display_hero_name("abc"))
     assert not CJK.search(metadata.display_augment_name("abc"))
+
+
+def test_rarity_labels_live_in_the_neutral_metadata_module():
+    """临时中文显示标签留在数据层，推荐/界面不再 import 已删除的 tencent。"""
+    assert metadata.RARITY_CN == {"silver": "白银", "gold": "黄金", "prismatic": "棱彩"}
+    from lolhex import recommend
+    assert recommend.RARITY_CN is metadata.RARITY_CN
 
 
 def test_display_accessors_do_not_touch_recognition_tables():

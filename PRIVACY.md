@@ -1,8 +1,8 @@
 # Privacy
 
 AramHex is a personal, screen-reading overlay for League of Legends ARAM: Mayhem. This
-document describes the current data behaviour and the final intended network scope. It is
-deliberately explicit about what is **not yet migrated**.
+document describes the current data behaviour and network scope, and is explicit about
+which acceptance checks are **not yet verified**.
 
 ## No telemetry, identity or remote control
 
@@ -34,30 +34,30 @@ Cookie, Authorization header or per-player parameter is added. Every downloaded 
 verified against the manifest SHA-256; a failed refresh keeps the last valid cache and the
 bundled fallback.
 
-## Final intended outbound scope
+## Approved outbound scope
 
-Only anonymous GET requests for the following purposes are intended to remain:
+Runtime downloads are limited to anonymous GET requests for these purposes:
 
-| Host | Purpose |
+| Host and path | Purpose |
 |---|---|
 | `aramhex.com/u/data/` | stats manifest and stats payloads |
-| `raw.githubusercontent.com/czgreat/aramhex-data/` | stats fallback |
-| `ddragon.leagueoflegends.com` | champion/item metadata and icons |
-| `raw.communitydragon.org` | static augment metadata and icons |
+| `raw.githubusercontent.com/czgreat/aramhex-data/main/` | stats fallback |
+| `ddragon.leagueoflegends.com/api/versions.json` and `/cdn/<version>/data/en_US/{champion,item}.json` | version discovery and English champion/item metadata |
+| `ddragon.leagueoflegends.com/cdn/<version>/img/champion/…png` and `/img/item/…png` | champion portraits (cached) and on-demand item icons |
+| `raw.communitydragon.org/…/global/default/v1/cherry-augments.json` | static augment metadata (name/rarity) only; no icons or splash art |
 
-No other host is intended to be contacted by the final build. There are no POST/PUT
-requests and no game-memory, injection or packet-capture access.
+No other host is permitted by the runtime download policy. There are no POST/PUT requests and no
+game-memory, injection or packet-capture access. Metadata and portraits are cached locally;
+a failed or malformed refresh keeps the last valid cache and the bundled fallback.
 
-## Migration status — do not overclaim
+## Migration status - do not overclaim
 
 - Install ID, log upload, usage reporting, remote config/notices/rollout, Riot-ID rank
-  lookup, self-update/patching and Korean OCR model download have been removed.
-- **Still present temporarily:** Tencent static metadata fetches
-  (`game.gtimg.cn`, `mlol.qt.qq.com`) and fixed jsDelivr stats mirrors. Those are being
-  removed/reviewed in the ongoing Tasks 3–4; this document describes the final target, not
-  a claim that every host above is already the only one contacted.
-- Offline and network-blocked startup have **not** yet been verified in the real build; that
-  acceptance remains open in Task 9.
+  lookup, self-update/patching, Korean OCR model download, Tencent static metadata
+  (`game.gtimg.cn`, `mlol.qt.qq.com`) and the old fixed jsDelivr stats mirrors have been
+  removed. Static metadata now comes from Data Dragon and CommunityDragon as listed above.
+- Offline and network-blocked startup have **not** yet been verified in a real application
+  run; that acceptance remains open in Task 9. Automated offline tests do not replace it.
 
 ## Attribution and licence boundaries
 

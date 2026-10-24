@@ -26,7 +26,7 @@
 
 from __future__ import annotations
 
-from .data.tencent import RARITY_CN
+from .data.metadata import RARITY_CN, RARITIES
 
 REROLL_BELOW = -0.5  # 低于英雄基准 0.5pp 以上：可考虑刷新
 REROLL_GAP = 2.0     # 比首选低 2pp 以上：可考虑刷新
@@ -130,7 +130,8 @@ def win_ranks(augments: dict, static: dict) -> dict:
     for aid, stats in augments.items():
         win = stats.get("win")
         rarity = (static.get(aid) or {}).get("rarity")
-        if rarity and type(win) in (int, float) and 0 <= win <= 1 and stats.get("games", 0) > 0:
+        # 只认三档；unknown/缺失不另立第四组，避免界面冒出没有名字的排名。
+        if rarity in RARITIES and type(win) in (int, float) and 0 <= win <= 1 and stats.get("games", 0) > 0:
             groups.setdefault(rarity, []).append((aid, win))
     ranks = {}
     for rows in groups.values():

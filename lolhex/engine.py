@@ -74,14 +74,17 @@ def rank_grade(rank, total) -> str | None:
 
 
 class Engine:
-    def __init__(self, settings: Settings, home: Path | None = None, store: DataStore | None = None):
+    def __init__(self, settings: Settings, home: Path | None = None, store: DataStore | None = None,
+                 transport=None):
         self.settings = settings
         self.home = home or app_home()
+        self.transport = transport
         if store is not None:
             self.store = store
         else:
             self.store = PublicStore(self.home / "data", settings.refresh_hours,
-                                     check_updates=settings.check_data_updates)
+                                     check_updates=settings.check_data_updates,
+                                     transport=transport)
         if hasattr(self.store, "set_band"):
             self.store.set_band(settings.data_band or None)
         self._apply_rec_model()
@@ -94,7 +97,7 @@ class Engine:
         self._detector = None  # 延迟创建，避免没进游戏就加载 OCR 模型
         self._icon_bank = None  # 英雄头像库，头像下载好后创建
         from .data.icons import IconCache
-        self.icons = IconCache(self.home / "data" / "img")  # 装备、召唤师技能小图标
+        self.icons = IconCache(self.home / "data" / "img", transport=transport)  # 装备、召唤师技能小图标
         self._cs_memo = None    # 选人界面各位置的识别结果缓存（champselect.Memo）
         self._manual_hero = False
         self._cs_last_seen = 0.0  # 上次在选英雄界面里的时刻（time.monotonic）
@@ -271,7 +274,7 @@ class Engine:
         heroes = self.store.heroes
         if not heroes:
             return
-        new = ensure_icons(folder, heroes) if download else 0
+        new = ensure_icons(folder, heroes, transport=self.transport) if download else 0
         if new or self._icon_bank is None:
             bank = IconBank.from_dir(folder, heroes, client_icons())
             if len(bank):

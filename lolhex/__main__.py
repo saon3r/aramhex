@@ -107,8 +107,10 @@ def main(argv=None) -> int:
     if args.refresh:
         engine = Engine(settings)
         engine.store.refresh(force=True)
-        print(json.dumps(engine.store.status(), ensure_ascii=False, indent=2))
-        return 0 if not engine.store.last_error else 1
+        status = engine.store.status()
+        print(json.dumps(status, ensure_ascii=False, indent=2))
+        # 刷新失败不等于没数据：有校验通过的下载/内置数据集就仍然可用（错误照实写在 JSON 里）。
+        return 0 if getattr(engine.store, "dataset", None) is not None else 1
     if args.scan_image:
         return _scan_image(Engine(settings), args.scan_image, args.hero)
 

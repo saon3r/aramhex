@@ -7,7 +7,6 @@
 import base64
 import hashlib
 import json
-import re
 from pathlib import Path
 
 import pytest
@@ -21,9 +20,6 @@ from lolhex.vision.portraits import IconBank
 FIXTURES = Path(__file__).resolve().parent / "fixtures" / "portraits"
 MANIFEST = json.loads((FIXTURES / "manifest.json").read_text(encoding="utf-8"))
 BENCH_SIZES = (64, 56)  # 预选栏头像小块的实际大小
-# 英文名和 DataDragon 路径名不一致的三个英雄；其余 170 个把 en_US 名字去掉空格/撇号就对得上内置别名
-_ALIAS_OVERRIDES = {"20": "Nunu", "62": "MonkeyKing", "888": "Renata"}
-
 
 def _read(path: Path) -> np.ndarray:
     img = cv2.imdecode(np.fromfile(str(path), np.uint8), cv2.IMREAD_COLOR)
@@ -41,17 +37,33 @@ def _ddragon_bank() -> IconBank:
     return IconBank({e["hero_id"]: _read(FIXTURES / e["source_file"]) for e in MANIFEST["sources"]})
 
 
-def _hero_id_alias(tencent: dict[str, bytes]) -> dict[str, str]:
-    """英雄 id → 内置腾讯头像的 alias（数据都来自仓库自带文件）。"""
-    by_name = {re.sub(r"[^a-z0-9]", "", alias.lower()): alias for alias in tencent}
-    i18n = json.loads((portraits.HERO_ICONS.parent / "i18n.json").read_text(encoding="utf-8"))
-    out = {}
-    for hid, langs in i18n["heroes"].items():
-        name = re.sub(r"[^a-z0-9]", "", langs["en_US"][0].lower())
-        alias = _ALIAS_OVERRIDES.get(hid) or by_name.get(name)
-        if alias is not None:
-            out[hid] = alias
-    return out
+def _fallback() -> dict:
+    return json.loads((portraits.HERO_ICONS.parent / "static_fallback.json").read_text(encoding="utf-8"))
+
+
+def _hero_id_alias(_tencent: dict[str, bytes] | None = None) -> dict[str, str]:
+    """英雄 id → Data Dragon alias（钉住的 id→alias 表，不是从显示名猜大小写）。"""
+    return {hid: rec["alias"] for hid, rec in _fallback()["heroes"].items()}
+
+
+def _bundled(icons: dict[str, bytes], alias: str) -> bytes:
+    """旧内置文件里个别 alias 大小写和 Data Dragon 不同（Fiddlesticks/FiddleSticks）。"""
+    if alias in icons:
+        return icons[alias]
+    low = alias.lower()
+    return next(body for name, body in icons.items() if name.lower() == low)
+
+
+def test_pinned_alias_map_covers_all_173_and_hard_cases():
+    heroes = _fallback()["heroes"]
+    client = portraits.client_icons()
+    assert len(heroes) == len(client) == 173 and set(heroes) == set(client)
+    for hid, alias in (("20", "Nunu"), ("62", "MonkeyKing"), ("888", "Renata"),
+                       ("121", "Khazix"), ("9", "Fiddlesticks"), ("17", "Teemo")):
+        assert heroes[hid]["alias"] == alias
+    sources = _fallback()["sources"]
+    assert sources["ddragon_champion"]["sha256"] and sources["communitydragon_augments"]["sha256"]
+    assert _fallback()["ddragon"] == "16.21.1"
 
 
 def test_fixture_provenance_is_pinned():
@@ -102,7 +114,7 @@ def test_bundled_tencent_references_classify_all_client_icons():
     assert len(tencent) == len(client) == 173
     id_alias = _hero_id_alias(tencent)
     assert set(id_alias) == set(client) and len(set(id_alias.values())) == len(id_alias)
-    bank = IconBank({alias: _decode(tencent[alias]) for alias in id_alias.values()})
+    bank = IconBank({alias: _decode(_bundled(tencent, alias)) for alias in id_alias.values()})
     assert len(bank) == 173
     correct = abstain = wrong = 0
     for hid, crop in client.items():
@@ -127,7 +139,7 @@ def test_combined_bank_has_full_fallback_coverage():
     tencent = portraits.hero_icons()
     client = portraits.client_icons()
     id_alias = _hero_id_alias(tencent)
-    bank = IconBank({hid: [_decode(tencent[id_alias[hid]]), crop] for hid, crop in client.items()})
+    bank = IconBank({hid: [_decode(_bundled(tencent, id_alias[hid])), crop] for hid, crop in client.items()})
     assert len(bank) == 173
     correct = wrong = 0
     for hid, crop in client.items():

@@ -318,10 +318,14 @@ def test_hero_icons_file_loads():
 
 
 def test_first_run_bank_ready_without_download(tmp_path, monkeypatch):
-    """第一次运行（没有缓存、不联网）：头像库直接用内置的建好，内置的英雄不再下载（用户新电脑选人认不出，10-22）。"""
+    """第一次运行（没有缓存、不联网）：头像库直接用内置的建好，下载失败也不影响识别。"""
     from lolhex.data import http
     from lolhex.vision import portraits
-    monkeypatch.setattr(http, "get", lambda *a, **k: pytest.fail("内置里有的头像不应下载"))
+
+    def boom(*_a, **_k):
+        raise RuntimeError("断网")
+
+    monkeypatch.setattr(http, "fetch", boom)
     aliases = sorted(portraits.hero_icons())
     heroes = {str(i): {"alias": a, "icon": f"https://example.invalid/{a}.png"} for i, a in enumerate(aliases)}
     folder = tmp_path / "icons"
@@ -334,19 +338,16 @@ def test_first_run_bank_ready_without_download(tmp_path, monkeypatch):
         assert bank.classify(cv2.resize(im, (64, 64), interpolation=cv2.INTER_AREA)).hero_id == hid
 
 
-def test_new_hero_not_bundled_still_downloads(tmp_path, monkeypatch):
-    """内置里没有的新英雄照常下载到缓存，缓存的优先于内置。"""
+def test_runtime_portrait_downloads_even_when_bundled_alias_exists(tmp_path, monkeypatch):
+    """运行时来源是 Data Dragon：即使旧内置里有同 alias 的头像，也要下载到缓存；内置仍作兜底。"""
     from lolhex.data import http
     from lolhex.vision import portraits
     alias = sorted(portraits.hero_icons())[0]
     body = portraits.hero_icons()[alias]
     got = []
-
-    class R:
-        content = body
-    monkeypatch.setattr(http, "get", lambda url, **k: got.append(url) or R())
+    monkeypatch.setattr(http, "fetch", lambda url, **k: got.append(url) or body)
     heroes = {"1": {"alias": alias, "icon": "u1"}, "999": {"alias": "BrandNewHero", "icon": "u999"}}
-    assert portraits.ensure_icons(tmp_path, heroes) == 1 and got == ["u999"]
+    assert portraits.ensure_icons(tmp_path, heroes) == 2 and got == ["u1", "u999"]
     assert (tmp_path / "BrandNewHero.png").read_bytes() == body
     assert len(portraits.IconBank.from_dir(tmp_path, heroes)) == 2
 

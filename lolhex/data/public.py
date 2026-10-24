@@ -17,6 +17,7 @@ hero() 只返回自采统计口径的数据。
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import logging
@@ -26,8 +27,8 @@ import time
 from pathlib import Path
 
 from .. import DATA_REPO, MIRROR
-from . import http
-from .store import DataStore, _read
+from . import http, metadata
+from .store import CHERRY_AUGMENTS, DataStore, _rarity, _read
 
 log = logging.getLogger(__name__)
 
@@ -86,7 +87,8 @@ class Dataset:
         manifest = _read(self.folder / "latest.json")
         if manifest is None:
             raise DatasetError(f"{folder} 没有 latest.json")
-        self.manifest = check_manifest(manifest)
+        # 清单是这份数据的身份：拷一份，调用方/下载流程后续改动不会悄悄改掉已加载数据集的校验依据。
+        self.manifest = check_manifest(copy.deepcopy(manifest))
         for name, f in self.manifest["files"].items():
             p = self.folder / name
             if not p.is_file() or _sha256(p) != f["sha256"]:
@@ -275,12 +277,10 @@ class PublicStore(DataStore):
     def __init__(self, root: Path, refresh_hours: float = 6.0, bundled: Path | None = None,
                  check_updates: bool = True, base_url: str | list[str] | None = None,
                  transport=None):
-        super().__init__(root, refresh_hours)
+        super().__init__(root, refresh_hours, transport=transport)
         self.bundled = Path(bundled or BUNDLED_DIR)
         self.downloaded = self.root / "public"
         self.check_updates = check_updates
-        # 父类 DataStore 还不接受 transport；先赋在这里，下一步集成再传进去。
-        self.transport = transport
         if base_url is None:
             urls = DATA_SOURCES
         else:
@@ -289,6 +289,7 @@ class PublicStore(DataStore):
         self.data_source: str | None = None  # 上次成功取到清单的地址
         self.band: str | None = None
         self.dataset: Dataset | None = None
+        self._dataset_seeded = False
         self.data_updated_at: float | None = None
         self.sync_error: str | None = None
         self.sync_progress: dict | None = None  # 下载统计数据时 {done, total}（字节）
@@ -304,7 +305,7 @@ class PublicStore(DataStore):
     # ---------- 数据集 ----------
 
     def reload_dataset(self) -> bool:
-        """重新挑选数据；换了一份返回 True。"""
+        """重新挑选数据；换了一份返回 True。换数据后把已验证的静态表并进本地种子。"""
         ds = load_best([(self.downloaded, "downloaded"), (self.bundled, "bundled")])
         with self._lock:
             changed = ds is not None and (self.dataset is None or ds.revision != self.dataset.revision)
@@ -312,7 +313,112 @@ class PublicStore(DataStore):
                 self.dataset = ds
                 self._views.clear()
             self._apply_ranks()
+        if ds is not None and (changed or not self._dataset_seeded):
+            self._seed_from_dataset(ds)
+            self._dataset_seeded = True
         return changed
+
+    @staticmethod
+    def _dataset_augment_ids(ds: "Dataset") -> set[str]:
+        """数据集里真正出现过的海克斯 ID；hero_augments 外层是英雄 ID，必须取内层键。"""
+        ids: set[str] = set()
+        _, hero_augs = ds.table(None)
+        for rows in (hero_augs.values() if isinstance(hero_augs, dict) else ()):
+            if isinstance(rows, dict):
+                ids.update(str(aid) for aid in rows)
+        ids |= {str(aid) for aid in ds.optional_table("augments.json")}
+        meta = ds.meta if isinstance(ds.meta, dict) else {}
+        for key in ("provisional_augments", "unobserved_augments"):
+            rows = meta.get(key)
+            if isinstance(rows, dict):
+                ids.update(str(aid) for aid in rows)
+        return ids
+
+    def _allowed_augment_ids(self) -> set[str]:
+        """Mayhem 白名单：已知本地 Mayhem 名字表 + 六张 Cherry 卡 + 数据集里验证过的 ID。
+
+        不从当前缓存里已有键反推：旧版本的 173 条英雄 ID 污染过缓存，不能自我证明合法。
+        """
+        ids = set(metadata.local_augment_ids()) | set(CHERRY_AUGMENTS)
+        if self.dataset is not None:
+            ids |= self._dataset_augment_ids(self.dataset)
+        return ids
+
+    def _seed_from_dataset(self, ds: "Dataset") -> None:
+        """校验通过的数据集里本来就带着英雄中文名、海克斯名字/稀有度和新卡标记：先并进静态表。
+
+        构造函数阶段调用，不发网络。只加白名单里真正有的 ID（Mayhem 统计/232 条字典/新卡），
+        不把英文源里 594 条竞技场记录整体放进来，也顺手清掉旧缓存里混进来的英雄 ID。
+        """
+        heroes, _ = ds.table(None)
+        meta = ds.meta if isinstance(ds.meta, dict) else {}
+        aug_meta = ds.optional_table("augments.json")
+        new_ids = set()
+        for key in ("provisional_augments", "unobserved_augments"):
+            rows = meta.get(key)
+            if isinstance(rows, dict):
+                new_ids.update(str(aid) for aid in rows)
+        allowed = self._allowed_augment_ids()
+        with self._lock:
+            cur_heroes = dict(self.heroes)
+            for hid, row in (heroes.items() if isinstance(heroes, dict) else ()):
+                if not isinstance(row, dict):
+                    continue
+                hid = str(hid)
+                base = dict(cur_heroes.get(hid) or {"id": hid})
+                if isinstance(row.get("name"), str) and row["name"].strip():
+                    base["name"] = row["name"].strip()
+                if isinstance(row.get("title"), str) and row["title"].strip():
+                    base["nick"] = row["title"].strip()
+                base.setdefault("name_en", metadata.hero_en(hid)[0])
+                base.setdefault("nick_en", metadata.hero_en(hid)[1])
+                base.setdefault("keywords", ",".join(
+                    t for t in (base.get("alias"), base.get("name_en"), base.get("nick_en")) if t))
+                cur_heroes[hid] = base
+
+            # 旧 schema 2 缓存可能把 173 个英雄 ID 当成海克斯；只保留白名单里的有效记录。
+            cur_augs = {aid: rec for aid, rec in self.augments.items() if aid in allowed}
+            for aid in allowed:
+                aid = str(aid)
+                row = aug_meta.get(aid) if isinstance(aug_meta, dict) else None
+                base = dict(cur_augs.get(aid) or {"id": aid})
+                if isinstance(row, dict) and isinstance(row.get("name"), str) and row["name"].strip():
+                    base["name"] = row["name"].strip()
+                if not base.get("name"):
+                    base["name"] = metadata.augment_zh(aid)
+                if not base.get("name_en"):
+                    base["name_en"] = metadata.augment_en(aid)
+                rarity = _rarity((row or {}).get("rarity")) if isinstance(row, dict) else None
+                if rarity:
+                    base["rarity"] = rarity
+                elif _rarity(base.get("rarity")) is None:
+                    base.pop("rarity", None)
+                base.setdefault("desc", "")
+                base.setdefault("icon", "")
+                modes = list(base.get("modes") or [])
+                if not any(str(m).startswith("KIWI") for m in modes):
+                    modes.append("KIWI")           # 数据集里出现的 ID 已证明是 Mayhem 卡
+                base["modes"] = modes
+                base["new"] = bool(base.get("new") or aid in new_ids)
+                cur_augs[aid] = base
+            families = self.static.get("families") or {}
+            patch = self.static.get("patch") if families.get("versions") else ds.patch
+            self.static = {**self.static, "heroes": cur_heroes, "augments": cur_augs,
+                           "patch": patch or self.static.get("patch", "")}
+        self._persist()
+
+    def _active_augment_ids(self) -> set[str]:
+        # 不回退到 super()：那里的 set(self.augments) 会把旧缓存污染当成合法来源。
+        return self._allowed_augment_ids()
+
+    def _new_augment_ids(self) -> set[str]:
+        ids = super()._new_augment_ids()
+        meta = self.dataset.meta if self.dataset and isinstance(self.dataset.meta, dict) else {}
+        for key in ("provisional_augments", "unobserved_augments"):
+            rows = meta.get(key)
+            if isinstance(rows, dict):
+                ids |= {str(aid) for aid in rows}
+        return ids
 
     def sync_data(self, force: bool = False, manual: bool = False) -> bool:
         """查数据仓库有没有更新的统计数据，有就下载并换上。下载了新数据返回 True。

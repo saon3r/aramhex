@@ -10,6 +10,8 @@
 
 **Spec:** `docs/superpowers/specs/2026-10-24-aram-mayhem-overlay-design.md`, issue https://github.com/saon3r/aramhex/issues/3, and the owner decisions recorded below. These decisions supersede the original design where it differs.
 
+**Latest execution rulings (apply without restarting the current wave):** Mechanical localisation needs controller review, not a reviewer agent or red-first cycle. Reviewer agents are reserved for network/privacy diffs or combined diffs above roughly 10 files. Future implementation briefs cover one interface and tests, about 10 files maximum; fixes carry only numbered failed criteria. Scratch-only extraction runs in parallel now; one writer still integrates the catalog. Task 8 is deferred to a follow-up issue after #3 closes, so only the strict UI/catalog gates block milestone 2. Controller owns documentation. Environment-dependent failures of the ten physical-pixel/DPI cases may be verified once in isolation and quarantined with a linked issue; deterministic regressions and the real refresh/offline/OCR/three-badge/live-game gates are never waived.
+
 ## Global constraints and owner decisions
 
 - Screen pixels only for recognition; no memory reads, injection, packet capture or input synthesis. Local HTTP remains read-only; no new game API integration.
@@ -112,6 +114,8 @@
 
 ## Task 4 — Static metadata, bounded network and offline seeding
 
+**Transport subtask complete:** `9cdc9e5`, controller suite **376 passed**, independent security/spec review clear. Real shipped-manifest routes are covered on both stats hosts; default requests cannot inherit proxy/netrc credentials, change the stable User-Agent, send a Referer or follow redirects. Static source/cache/offline integration is the next subtask; old Tencent/Chinese-locale requests are currently denied, not silently allowed pending migration.
+
 **Files:** new `data/metadata.py`; `data/http.py`, `data/store.py`, `data/public.py`, `data/icons.py`, `engine.py`, `config.py`, callers; delete remaining `data/tencent.py` once no imports survive. New `tests/test_network_policy.py`, `tests/test_data_cache.py`; extend parser/store tests and AGENTS.md.
 
 - [ ] Write tests for the GET-only boundary: reject unknown host/path, userinfo/ports, traversal, payload-supplied absolute URLs, unsupported methods, identity/cookie headers and redirects before sending. Reject external redirects rather than following and checking after data has already escaped.
@@ -142,6 +146,8 @@
 
 ## Task 6 — Catalog/helper, complete key extraction and one reviewed pilot
 
+**Pilot accepted by controller:** 201 catalog keys; frozen `tr`/`set_language`/`quantity`/`short_date` API and escaped `data_status_html` pilot. Helper/pilot plus package-resource tests: **49 passed**. The real AST gate remains red for the six unconverted modules, deliberately without exemptions. Complete inventory and module conversion map are in this plan's scratch workspace. Task 8 producers are inventoried but remain deferred.
+
 **Files:** new `lolhex/messages.py`, `lolhex/data/messages.json`, `tests/test_messages.py`, `tests/test_no_cjk_ui.py`; modify only `ui/data_status.py` as the conversion pilot, `config.py`/startup for UI language, its existing assertions in `tests/test_public.py`, resource packaging as required.
 
 - [ ] One worker owns the catalog end to end in this task: extract **every** key needed by every module in scope — every `ui/*.py` module, the Task 8 non-UI rendered text, CLI text and engine snapshot display fields — and write the complete `messages.json` once, with `zh_CN` originals kept for real text. This worker is the sole catalog writer for the whole milestone; Tasks 7–8 convert code against that frozen file.
@@ -155,7 +161,7 @@
 
 **Files:** each worker owns exactly one of `ui/badgepos.py`, `herosearch.py`, `buildview.py`, `autoshot.py`, `overlay.py`, `mainwindow.py`, plus its own disjoint tests. `data_status.py` is already converted. All share the Task 6 helper contract and the frozen catalog; nobody writes `messages.json`.
 
-- [ ] Wave 1: `badgepos.py`, `herosearch.py`, `buildview.py`, `autoshot.py`. Wave 2: `overlay.py`, `mainwindow.py` (the two largest, so they get a wave and the time). Dispatch each wave's workers together in the background, wait for all of them, then run the gates — four concurrent workers is the target here, one or two anywhere else.
+- [ ] Wave 1: `badgepos.py`, `herosearch.py`, `buildview.py`, `autoshot.py`. Wave 2: `overlay.py`, `mainwindow.py`, plus bounded module-verification workers for `autostart.py` and `single_instance.py` (already free of UI CJK; no gratuitous edits). Dispatch each wave's four workers together in the background, wait for all of them, then run the gates. Do not pull deferred Task 8 into the second wave merely to fill seats.
 - [ ] Code only. Each worker converts its one module and its own tests and returns proposals for any key the frozen catalog lacks. No worker edits the catalog; the single Task 6 catalog writer applies accepted proposals in a separate, non-parallel phase before the next wave starts.
 - [ ] For each module: write/update English rendering assertions and run the per-module AST check to show its red state; convert all non-docstring CJK literals, preserving Chinese originals in catalog entries for real text. Use ASCII internal identifiers and screenshot phase filenames; migrate their references/tests rather than cataloguing machine keys.
 - [ ] Resolve hero/augment display names through Task 4 English accessors. Do not show Chinese aliases/nicknames as English autocomplete text, alter matching tables, translate arbitrary JSON payloads in place or display internal augment stringtable keys.
@@ -164,6 +170,8 @@
 - [ ] Once all modules are converted, require the entire strict UI AST gate to pass, including logging strings in UI modules; verify retained item/summoner stats rendering and static About attribution in the real window, launched and read by the agent.
 
 ## Task 8 — Rendered text outside UI and coverage boundaries
+
+**DEFERRED by owner:** Do not execute this task for milestone 2. Keep its inventory as scratch/planned follow-up; create the follow-up issue after #3 closes. The requirements below describe that later polish, not milestone-2 blockers. Core fallback behavior from Task 3 and the existing source/recognition safeguards remain required.
 
 **Files:** `recommend.py`, `panel.py`, `data/public.py`, `data/metadata.py`, `config.py`, `__main__.py`, `engine.py` only where rendered data requires it; `tests/test_no_cjk_ui.py`, `test_messages.py`, new `tests/test_display_localisation.py`. Code only: the catalog was extracted complete in Task 6 and is frozen, so any key found missing here becomes a proposal to the single catalog writer, applied in a separate non-parallel phase.
 
@@ -193,7 +201,7 @@
 
 Every item below must have evidence linked from the issue/PR; a blocked or pending item means #3 stays open. The real-refresh and offline/cold-start gates are never waived on partial or pre-removal evidence.
 
-- [ ] English catalog and strict AST test pass for every `lolhex/ui/*.py` string literal except actual docstrings; catalog key/placeholder checks and named non-UI rendered-text tests pass. Intentional recognition/data/diagnostic exclusions are documented precisely.
+- [ ] English catalog and strict AST test pass for every `lolhex/ui/*.py` string literal except actual docstrings; catalog key/placeholder checks pass. Non-UI rendered-text polish/gates are explicitly deferred to Task 8's follow-up, not silently described as complete. Intentional recognition/data/diagnostic exclusions are documented precisely.
 - [ ] A fresh config uses English UI and `game_lang == "en_US"` without manual editing, and recognises the real English fixture.
 - [ ] Old configs cannot resurrect `install_id` or `send_usage`; generation, persistence and transmission are gone, along with every prohibited remote feature and Tencent request.
 - [ ] Static About/upstream MIT notices and stats CC BY-NC 4.0 attribution remain available offline.

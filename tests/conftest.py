@@ -1,11 +1,10 @@
-"""测试夹具：腾讯官方资料用 2026-09-25 实抓并裁剪过的真实数据；统计数据用一份小的合成数据，离线构建 PublicStore。"""
+"""测试夹具：静态资料/头像用随程序的公开元数据；统计数据用一份小的合成数据，离线构建 PublicStore。"""
 
 from __future__ import annotations
 
 import hashlib
 import json
 import sys
-import time
 from pathlib import Path
 
 import pytest
@@ -36,16 +35,35 @@ def _aug(games, win):
 TEEMO = {"2128": _aug(30000, 0.52), "1029": _aug(40000, 0.60), "1373": _aug(20000, 0.55)}
 
 
+_I18N = json.loads((ROOT / "lolhex" / "data" / "i18n.json").read_text(encoding="utf-8"))
+_FALLBACK = json.loads((ROOT / "lolhex" / "data" / "static_fallback.json").read_text(encoding="utf-8"))
+
+
+def _augment_meta(ids) -> dict:
+    """和发布数据同形的最小海克斯表：名字/稀有度来自本地公开表，测试不联网。"""
+    out = {}
+    for aid in ids:
+        rec = dict(_FALLBACK["augments"].get(str(aid)) or {})
+        name = ((_I18N.get("augments") or {}).get(str(aid)) or {}).get("zh_CN")
+        if name:
+            rec["name"] = name
+        out[str(aid)] = rec or {"rarity": "gold"}
+    return out
+
+
 def make_dataset(folder: Path, snapshot_at="2026-10-13T11:56:47+08:00", patch="16.20", bands=True,
-                 heroes=None, hero_augments=None, seq=0) -> dict:
+                 heroes=None, hero_augments=None, seq=0, meta_extra=None) -> dict:
     """在 folder 写一份公开数据（和数据仓库同格式），返回清单。"""
     heroes = heroes or {"17": _hero(400000, 212000, 1), "1": _hero(300000, 147000, 2)}
     hero_augments = hero_augments or {"17": dict(TEEMO), "1": {"1029": _aug(5000, 0.47)}}
+    aug_ids = sorted({aid for rows in hero_augments.values() for aid in rows})
+    meta = {"schema_version": 1, "patch": patch, "mode": "normal",
+            "matches": {"collected": 72000, "valid": 70000, "excluded": 2000},
+            "window": {"start": "2026-10-09T08:14:00+08:00", "end_exclusive": "2026-10-13T10:00:00+08:00"},
+            "regions": ["艾欧尼亚"]}
+    meta.update(meta_extra or {})
     files = {"heroes.json": heroes, "hero_augments.json": hero_augments,
-             "meta.json": {"schema_version": 1, "patch": patch, "mode": "normal",
-                           "matches": {"collected": 72000, "valid": 70000, "excluded": 2000},
-                           "window": {"start": "2026-10-09T08:14:00+08:00", "end_exclusive": "2026-10-13T10:00:00+08:00"},
-                           "regions": ["艾欧尼亚"]}}
+             "augments.json": _augment_meta(aug_ids), "meta.json": meta}
     if bands:
         for i, b in enumerate(BANDS):  # 分段越高，提莫越强，便于断言
             files[f"bands/{b}/heroes.json"] = {"17": _hero(1000 * (4 - i), int(1000 * (4 - i) * (0.50 + 0.02 * i))),
@@ -85,21 +103,11 @@ def no_network(monkeypatch):
 
 @pytest.fixture
 def store(tmp_path, no_network):
-    """离线 PublicStore：官方静态资料、提莫的单英雄官方数据、一份内置统计数据都已就绪，且禁止联网。"""
-    from lolhex.data import tencent
+    """离线 PublicStore：静态资料由内置公开表种子生成，统计数据用内置合成数据；全程禁止联网。"""
     from lolhex.data.public import PublicStore
 
-    now = time.time()
     root = tmp_path / "data"
     root.mkdir()
-    static = {
-        "fetched_at": now, "patch": "16.20", "versions": [{"name": "16.20"}],
-        "heroes": tencent.parse_hero_list(fixture("tencent_hero_list.json")),
-        "augments": tencent.parse_kiwi_augments(fixture("tencent_kiwi_augments.json")),
-        "items": tencent.parse_items(fixture("tencent_items.json")),
-        "spells": tencent.parse_summoner_spells(fixture("tencent_summoner_spells.json")),
-    }
-    (root / "static.json").write_text(json.dumps(static, ensure_ascii=False), encoding="utf-8")
     bundled = tmp_path / "bundled"
     make_dataset(bundled)
     return PublicStore(root, bundled=bundled, check_updates=False)

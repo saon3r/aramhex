@@ -73,6 +73,30 @@ Fanning out is allowed; shared state is not.
 
 ## Current status
 
+### Milestone 2 execution rulings
+
+- Finish the current wave; do not restart or re-plan it. Implementation briefs cover one
+  interface plus tests, at most roughly 10 files. Keep transport/seeding serial; use
+  separate disjoint briefs for portraits, CLI and other follow-ups. Fix briefs contain
+  only failed items and their criterion numbers, not the full original contract.
+- Independent reviewer agents are required only for network-policy/privacy-boundary
+  changes or diffs larger than roughly 10 files. The controller reviews mechanical
+  localisation directly. Mechanical extraction/string conversion needs no red-first
+  cycle; behaviour changes still do.
+- Localisation waves target four workers. Scratch-only key extraction can run alongside
+  the current wave: no product edits and no catalog writes. The single catalog-writer
+  rule remains in force when that inventory is integrated.
+- Task 8 (non-UI rendered-text polish) is deferred to a new issue after milestone 2 closes.
+  Its wider display-text gate does not block milestone 2's strict `lolhex/ui/*.py` gate.
+- If the ten `test_badges_follow_physical_pixels_at_current_qt_scale` cases fail because
+  of environment/DPI, verify once in isolation, quarantine with a skip and linked issue,
+  then stop iterating. Do not quarantine deterministic product regressions.
+- The controller writes AGENTS.md and PRIVACY.md directly; no documentation worker is
+  needed. Stop repeated fix delegations: take over or split remaining work, never send a
+  fourth attempt.
+- Unwaived acceptance: real post-removal app refresh, offline startup, fixture OCR and
+  three rendered badges, live bench recognition, and one full English-game session.
+
 - **Milestone 1 — verified.** Upstream runs unmodified on this client. The augment screen
   is proven against `tests/fixtures/real-mayhem-augment-screen.png`; the app launches.
   *Still unchecked:* champion select, which needs a live client in a queue.
@@ -98,7 +122,7 @@ On a fresh machine: `py -3.13 -m venv .venv`, then
 # the app (tray icon, overlay; close via the tray menu)
 .venv\Scripts\python.exe -m lolhex
 
-# tests — 308 passing, ~57 s, needs offscreen Qt
+# tests — use offscreen Qt; current results are recorded in the milestone evidence
 $env:QT_QPA_PLATFORM = 'offscreen'; .venv\Scripts\python.exe -m pytest -q
 
 # recognition only, against a still image. The fastest way to check a change.
@@ -145,16 +169,42 @@ These are the reason the fork exists. Do not trade them away:
 | `lolhex/vision/matcher.py` | Fuzzy name matching against the augment list |
 | `lolhex/ui/overlay.py` | In-game layers, badges, click-through window |
 | `lolhex/ui/mainwindow.py` | Main window + tray |
-| `lolhex/data/public.py` | Stats download/cache |
+| `lolhex/data/public.py` | Stats download/cache; dataset seeding |
+| `lolhex/data/metadata.py` | Data Dragon / CommunityDragon parsers, English display helpers |
+| `lolhex/data/store.py` | Offline static seed, per-family refresh, atomic `static.json` cache |
+| `lolhex/data/static_fallback.json` | Pinned offline fallback (id→Data Dragon alias, augment rarity, spell names) with source hashes |
 | `lolhex/data/*.json`, `lolhex/data/bundled/` | Bundled names, aliases, stats |
-| `tests/` | 308 tests; `tests/fixtures/` holds the redacted real capture |
+| `tests/` | Automated suite; `tests/fixtures/` holds the redacted real capture |
 
 Comments and docstrings are Chinese and are the real documentation — keep them.
 
+## Runtime network hosts
+
+All runtime HTTP goes through `lolhex/data/http.py`; it refuses anything not on this list
+before sending. All four are anonymous HTTPS GET only, no cookies/credentials/referer.
+The policy also permits the equivalent `en_GB` Data Dragon metadata paths; the current
+metadata refresher uses `en_US` names.
+
+| Host and path | Exact purpose |
+|---|---|
+| `aramhex.com/u/data/` | stats manifest and stats payloads (primary) |
+| `raw.githubusercontent.com/czgreat/aramhex-data/main/` | stats manifest and payloads (fallback) |
+| `ddragon.leagueoflegends.com/api/versions.json` + `/cdn/<version>/data/en_US/{champion,item}.json` + `/cdn/<version>/img/{champion,item}/…png` | version discovery; en_US champion/item metadata; champion portraits and on-demand item icons |
+| `raw.communitydragon.org/…/global/default/v1/cherry-augments.json` | English augment metadata only (name/rarity); no icons/splash |
+
+No Tencent host (`game.gtimg.cn`, `mlol.qt.qq.com`) and no jsDelivr mirror is contacted by
+the shipped app. Maintenance scripts under `scripts/` are not runtime code and may read wider
+CommunityDragon paths to regenerate bundled tables; they never import Tencent endpoints.
+
 ## Traps we have already hit
 
-- **`game_lang` defaults to `zh_CN`.** English card text matches nothing until it is set
-  to `en_US`. This looked like "OCR is broken" for a whole debugging round.
+- **`game_lang` must match the client language.** Upstream defaulted to `zh_CN`; this fork's
+  `Settings` default is `en_US` (pinned by tests, and old config files without the key load
+  as `en_US`). Wrong language = card names match nothing and looks like "OCR is broken".
+- **Do not derive portrait filenames from display names.** Data Dragon aliases differ from
+  English names and from the old Tencent spellings (`Nunu`, `MonkeyKing`, `Renata`,
+  `Khazix`, `Fiddlesticks` vs `FiddleSticks`). Use `static_fallback.json`; a case-insensitive
+  fallback covers old bundled bytes.
 - **Files are UTF-8 without BOM.** Windows PowerShell 5.1 `Get-Content` mangles them; use
   `-Encoding UTF8` or the `read` tool.
 - **Capture resolution varies.** The fixture is 2560×1440; an earlier session logged

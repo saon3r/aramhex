@@ -1,7 +1,8 @@
-"""装备、召唤师技能的小图标：按需从腾讯 CDN 下载到本地，界面用本地文件显示。
+"""装备、召唤师技能的小图标：按需从公开 CDN（Data Dragon）下载到本地，界面用本地文件显示。
 
 界面线程只查本地文件，不等网络：没有就先返回 None（界面先显示文字），同时交给后台线程下载；
-下载完成后 version 加一，界面据此重新渲染。
+下载完成后 version 加一，界面据此重新渲染。只接受能解码的 PNG，先写临时文件再原子替换，
+坏响应不会覆盖上一份好缓存。
 """
 
 from __future__ import annotations
@@ -47,22 +48,33 @@ class IconCache:
         self._pool.submit(self._download, path, url, tag)
 
     def _download(self, path: Path, url: str, tag: str) -> None:
+        tmp = path.with_suffix(".tmp")
         try:
-            if url.startswith("//"):
-                url = "https:" + url
             body = http.fetch(url, timeout=15, transport=self.transport)
-            if not body.startswith(b"\x89PNG"):
-                raise ValueError("返回的不是 PNG")
+            _require_png(body)
             path.parent.mkdir(parents=True, exist_ok=True)
-            tmp = path.with_suffix(".tmp")
             tmp.write_bytes(body)
             tmp.replace(path)
             with self._lock:
                 self.version += 1
         except Exception as e:
             log.info("图标下载失败 %s：%s", url, e)
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
             with self._lock:
                 self._failed[tag] = time.time()
         finally:
             with self._lock:
                 self._pending.discard(tag)
+
+
+def _require_png(body: bytes) -> None:
+    """下载的图标必须能真正解码；只有 PNG 头不算（CDN 错误页、半截文件都拒绝）。"""
+    if not body or not body.startswith(b"\x89PNG"):
+        raise ValueError("返回的不是 PNG")
+    import cv2
+    import numpy as np
+    if cv2.imdecode(np.frombuffer(body, np.uint8), cv2.IMREAD_COLOR) is None:
+        raise ValueError("返回的 PNG 解不开")

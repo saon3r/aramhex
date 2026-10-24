@@ -1,10 +1,10 @@
-"""选英雄头像识别用的腾讯方形头像，打成一个文件随程序内置。
+"""（维护脚本）把 Data Dragon 方形头像打成离线兜底文件，可选重生成 lolhex/data/hero_icons.json。
 
     python scripts/update_hero_icons.py [--out lolhex/data/hero_icons.json]
 
-以前首次运行才从腾讯 CDN 逐个下载（全局限速 0.35 秒一次，173 张约 1 分钟），这一分钟里进选人认不出自己的英雄。
-内置后启动即可用；腾讯原图字节不改（和下载的缓存一模一样），按英雄 alias 存。之后新出的英雄照常补下载。
-拳头客户端那一套另见 scripts/update_client_icons.py。
+运行时头像来源已经是 Data Dragon（下载到用户缓存）；这个文件只在内置/离线兜底和回滚时用。
+旧文件里的腾讯字节不删；重跑会把同一批 alias 换成 Data Dragon 的公开图（大小写以 Data Dragon
+为准，如 Fiddlesticks）。请求都经过 lolhex.data.http 的匿名只读边界，不碰腾讯。
 """
 from __future__ import annotations
 
@@ -13,35 +13,35 @@ import base64
 import json
 import sys
 import time
-from concurrent.futures import ThreadPoolExecutor
 from pathlib import Path
-
-import requests
 
 ROOT = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(ROOT))
 
-from lolhex.data import tencent  # noqa: E402
-
-
-def fetch(url: str) -> bytes:
-    r = requests.get(url, timeout=60, headers={"Referer": tencent.REFERER})
-    r.raise_for_status()
-    return r.content
+from lolhex.data import http, metadata  # noqa: E402
 
 
 def main() -> int:
     ap = argparse.ArgumentParser()
     ap.add_argument("--out", default=str(ROOT / "lolhex" / "data" / "hero_icons.json"))
     args = ap.parse_args()
-    heroes = tencent.parse_hero_list(tencent.fetch_hero_list())
-    todo = sorted((h["alias"], h["icon"]) for h in heroes.values() if h.get("alias"))
-    with ThreadPoolExecutor(4) as ex:
-        blobs = list(ex.map(lambda t: fetch(t[1]), todo))
-    icons = {alias: base64.b64encode(b).decode("ascii") for (alias, _), b in zip(todo, blobs)}
-    out = {"source": f"{tencent.GTIMG}/champion/{{alias}}.png", "fetched": time.strftime("%Y-%m-%d"), "icons": icons}
-    Path(args.out).write_text(json.dumps(out, ensure_ascii=False, sort_keys=True), encoding="utf-8")
-    print(f"{len(icons)} 个英雄头像 → {args.out}（{Path(args.out).stat().st_size / 1e6:.1f} MB）")
+    versions = http.get_json(f"{metadata.DDRAGON_API}/versions.json", timeout=30)
+    version = str(versions[0])
+    payload = http.get_json(
+        f"{metadata.DDRAGON_BASE}/{version}/data/en_US/champion.json", timeout=60)
+    heroes = metadata.parse_champions(payload, version)
+    icons = {}
+    for hid in sorted(heroes, key=int):
+        rec = heroes[hid]
+        icons[rec["alias"]] = base64.b64encode(
+            http.fetch(rec["icon"], timeout=30)).decode("ascii")
+    out = {"source": f"{metadata.DDRAGON_BASE}/{version}/img/champion/{{alias}}.png",
+           "fetched": time.strftime("%Y-%m-%d"), "ddragon": version,
+           "note": "离线兜底/回滚用；运行时来源仍是 Data Dragon 下载缓存，见 static_fallback.json",
+           "icons": icons}
+    path = Path(args.out)
+    path.write_text(json.dumps(out, ensure_ascii=False, sort_keys=True), encoding="utf-8")
+    print(f"{len(icons)} 个英雄头像 → {path}（{path.stat().st_size / 1e6:.1f} MB）")
     return 0
 
 

@@ -1,4 +1,4 @@
-"""手动搜英雄：别名、玩家叫法、拼音缩写都能搜到。"""
+"""手动搜英雄：别名、玩家叫法、英文名/称号都能搜到（英文 fork 不再生成腾讯拼音缩写）。"""
 import os
 
 import pytest
@@ -7,7 +7,8 @@ import pytest
 def test_resolve_hero_by_alias(store):
     assert store.resolve_hero("提百万") == "17"      # 玩家叫法（Hexdata）
     assert store.resolve_hero("快乐风男") == "157"
-    assert store.resolve_hero("tm") == "17"          # 腾讯关键词里的拼音缩写
+    assert store.resolve_hero("Teemo") == "17"       # 英文别名
+    assert store.resolve_hero("the Swift Scout") == "17"  # 英文称号
     assert store.resolve_hero("火女") == "1"
     assert store.resolve_hero("托儿所") == "157"     # 网上常见外号（hero_nicknames.json）
     assert store.resolve_hero("蘑菇") == "17"
@@ -33,7 +34,8 @@ def test_completer_matches_aliases(store):
 
     assert "17" in hits("提百万")
     assert "157" in hits("快乐风男")
-    assert "17" in hits("xjch")
+    assert "17" in hits("Teemo")
+    assert "17" in hits("Swift Scout")
     assert "157" in hits("托儿所")
     assert hits("提莫") == ["17"]
     m = comp.completionModel()

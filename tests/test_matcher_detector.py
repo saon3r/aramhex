@@ -1,11 +1,13 @@
-import pytest
-from conftest import fixture
+import json
+from pathlib import Path
 
-from lolhex.data.tencent import parse_kiwi_augments
+import pytest
+
 from lolhex.vision.matcher import NameMatcher, normalize
 
-AUGS = parse_kiwi_augments(fixture("tencent_kiwi_augments.json"))
-NAMES = {k: v["name"] for k, v in AUGS.items()}
+_I18N = json.loads((Path(__file__).parent.parent / "lolhex" / "data" / "i18n.json")
+                   .read_text(encoding="utf-8"))
+NAMES = {aid: rec["zh_CN"] for aid, rec in _I18N["augments"].items() if rec.get("zh_CN")}
 
 
 def test_normalize():
