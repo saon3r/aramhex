@@ -5,6 +5,8 @@
 - recognize(img)：已知文字区域时只做识别（每块约 20ms）。
 模型首次使用时加载（约 0.5s），之后常驻。
 韩服识别模型下载已移除（use_rec_model 仍保留接口，默认用内置模型）。
+Det/Rec/Cls 三个模型固定用安装包内的本地文件（见 _MODEL_FILES）：缺文件/空文件直接报错，
+损坏文件由 onnxruntime 拒绝；任何情况下都不会去 modelscope.cn 下载模型。
 只用一个线程：onnxruntime 默认把所有核都拉来算，对局中每次认字都会和游戏抢 CPU，玩家会掉帧、卡顿。
 单线程总 CPU 少一半，慢一点（标题条约 70ms、整块扫描约 1 秒）不影响使用。
 """
@@ -14,10 +16,43 @@ from __future__ import annotations
 import logging
 import threading
 from dataclasses import dataclass
+from pathlib import Path
 
 import numpy as np
 
 log = logging.getLogger(__name__)
+
+# rapidocr 自带（随安装包发布）的三个 ONNX 模型。名字写死是有意的：升级换代改了默认
+# 模型名时，这里找不到文件就本地报错停下，绝不让 rapidocr 去 modelscope.cn 下载。
+# PyInstaller 用 collect_data_files("rapidocr") 把它们放在同一个相对路径下。
+_MODEL_FILES = {
+    "Det": "PP-OCRv6_det_small.onnx",
+    "Rec": "PP-OCRv6_rec_small.onnx",
+    "Cls": "ch_ppocr_mobile_v2.0_cls_mobile.onnx",
+}
+
+
+class ModelUnavailableError(RuntimeError):
+    """本地 OCR 模型缺失或为空：宁可失败也不联网下载。"""
+
+
+def _bundled_model_dir() -> Path:
+    """rapidocr 包内的 models 目录（从包实际位置解析，不写死 .venv 路径）。"""
+    import rapidocr
+
+    return Path(rapidocr.__file__).resolve().parent / "models"
+
+
+def _bundled_model_paths() -> dict[str, Path]:
+    """三个本地模型路径；缺失/空文件在创建引擎之前就报错。"""
+    root = _bundled_model_dir()
+    paths = {part: root / name for part, name in _MODEL_FILES.items()}
+    for part, path in paths.items():
+        if not path.is_file():
+            raise ModelUnavailableError(f"{part} 模型缺失：{path}（不联网下载，请检查 rapidocr 安装）")
+        if path.stat().st_size <= 0:
+            raise ModelUnavailableError(f"{part} 模型是空文件：{path}（不联网下载，请检查 rapidocr 安装）")
+    return paths
 
 
 @dataclass
@@ -51,6 +86,10 @@ class OCR:
         from rapidocr import RapidOCR
         logging.getLogger("RapidOCR").setLevel(logging.ERROR)
         params = dict(THREADS)
+        # 固定本地模型路径：model_path 非空时 rapidocr 不会走下载分支，缺模型只是报错。
+        # 非空但损坏的文件交给 onnxruntime 拒绝（SDK 的 SHA 校验在本地路径下不生效）。
+        for part, path in _bundled_model_paths().items():
+            params[f"{part}.model_path"] = str(path)
         if rec_model:
             from rapidocr.utils.typings import LangRec, ModelType, OCRVersion
             params.update({"Rec.lang_type": LangRec.KOREAN, "Rec.model_type": ModelType.MOBILE,

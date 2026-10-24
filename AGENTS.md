@@ -101,7 +101,7 @@ Fanning out is allowed; shared state is not.
   is proven against `tests/fixtures/real-mayhem-augment-screen.png`; the app launches.
   *Still unchecked:* champion select, which needs a live client in a queue.
 - **Milestone 2 — in progress (issue #3).** English UI/catalog gates and the full suite
-  pass (508 tests). Real ordinary refresh, cold/warm offline startup, fixture OCR and
+  pass (514 tests). Real ordinary refresh, cold/warm offline startup, fixture OCR and
   three badges are verified. **Still open:** live bench recognition and a full game.
   Evidence: `docs/superpowers/verification/2026-10-24-milestone-2.md`.
 
@@ -233,6 +233,14 @@ CommunityDragon paths to regenerate bundled tables; they never import Tencent en
 - **Policy tests must use the shipped manifest's paths.** Stats live under
   `patches/<patch>/normal` (including `normal.pack.xz`); mode-less test-server paths
   once hid a policy that blocked every real stats payload despite a green suite.
+- **RapidOCR has its own model downloader.** Null model paths can trigger direct
+  `modelscope.cn` requests if a bundled ONNX model is missing, empty or has a bad hash,
+  bypassing our HTTP boundary. Pin local Det/Rec/Cls paths and fail closed; tests must
+  simulate missing/corrupt models without altering the installed model files.
+  Explicit paths bypass the SDK's hash checker; invalid ONNX files and damaged character
+  metadata are regression-tested to fail locally without downloads. If a RapidOCR
+  upgrade renames models, update the pins deliberately; never
+  restore automatic downloads to make an upgrade work.
 
 ## How we work
 
