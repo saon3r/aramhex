@@ -12,6 +12,65 @@ integration. Built for one player on EUW with an `en_GB` client.
 Read the design doc before proposing anything. It records what was measured, what was
 rejected and why. Most "obvious improvements" were already considered there.
 
+## Who does what — read this twice
+
+**The owner is not a programmer. Treat them as the client, not as a pair.**
+
+The agent does every technical thing: reading code, editing, running commands and tests,
+git, GitHub (branches, pull requests, merges, issue comments), environment setup,
+verification, and documentation. Never ask the owner to run a command, read a diff,
+interpret output, click through a GUI, or judge code quality.
+
+Code review is the agent's job. For a second opinion, dispatch a reviewer subagent with
+fresh context. Never ask the owner to review a diff.
+
+The owner does exactly two things:
+
+1. **Plays a game when asked**, for live acceptance. They interpret nothing. The agent
+   launches and manages the app, and afterwards reads the logs, screenshots and scan
+   output itself.
+2. **Answers questions of preference.** Ask in plain language, give a recommendation, and
+   say what each option costs. Never ask them to choose between technical alternatives —
+   make that call yourself and record it.
+
+If a step seems to need the owner, first ask whether it can be automated or verified
+another way. It usually can.
+
+Two consequences worth spelling out:
+
+- **Report conclusions, not output.** The agent reads the logs, JSON, screenshots and test
+  results, decides pass or fail, and tells the owner what happened in plain English. The
+  owner is never handed evidence to weigh.
+- **Git and GitHub writes are pre-authorised.** Branches, commits, PRs, merges into `main`,
+  issue comments and closures need no owner approval. Ask only when scope, risk or
+  acceptance materially changes — never for a technical choice, a diff or a test result.
+
+The owner may ask to be walked through GitHub for learning. That is optional and never a
+dependency — do the work either way.
+
+## Parallel workers
+
+Fanning out is allowed; shared state is not.
+
+- **Disjoint files only.** No two workers edit one file in a wave. No parallel `git`
+  commands, no parallel merges, no parallel full-suite runs — ever.
+- **One catalog writer.** One worker extracts every key and writes the complete catalog
+  once; after that the catalog is frozen and one worker per UI module changes code only.
+  A worker that finds a missing key returns a proposal; the single catalog writer applies
+  it in a separate, non-parallel phase. No later worker writes the catalog.
+- **Where parallelism pays:** up to 4 concurrent workers while localising UI modules, 1–2
+  elsewhere. Dispatch a wave together in the background, then wait for all of it.
+- **Workers** cannot spawn agents, run the full suite, or touch git unless explicitly
+  assigned; they run only the scoped tests for their own files.
+- **The controller** runs the gates, the full suite and `git diff --check` after each wave,
+  and reviews the combined diff — not each fragment in isolation. What the controller runs
+  is the acceptance signal.
+- **Two failed attempts on one task stop the delegation** for it; the controller takes it
+  over or reports.
+- The owner's rules here override the delegation skill's generic defaults — its ban on
+  parallel agents, its model tiers, and its "every worker runs the suite" contract.
+  Worker, explore and reviewer agents all use the plan's cheap flash model.
+
 ## Current status
 
 - **Milestone 1 — verified.** Upstream runs unmodified on this client. The augment screen
@@ -108,6 +167,12 @@ Comments and docstrings are Chinese and are the real documentation — keep them
 - **The raw capture is not committed.** `screenshots/` is gitignored because it contains
   other players' Riot IDs. `tests/fixtures/real-mayhem-augment-screen.png` is the redacted
   version — use it, and keep future fixtures redacted too.
+- **`bash` on PATH is a broken WSL shim.** The SDD scripts need
+  `& "C:\Program Files\Git\bin\bash.exe" ...`; plain `bash` fails with
+  `execvpe(/bin/bash)`. The `sdd-workspace` script works fine under Git Bash.
+- **`git checkout <branch> -- <file>` stages the file.** When an uncommitted carry is the
+  point (e.g. bringing a later `main` doc onto a milestone branch), use
+  `git restore --source=<branch> --worktree -- <file>` instead.
 
 ## How we work
 
