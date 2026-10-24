@@ -12,7 +12,7 @@ def test_engine_logs_evaluation_once(store, tmp_path, caplog):
         eng._reevaluate()
         eng._reevaluate()
     lines = [r.getMessage() for r in caplog.records if "三选一" in r.getMessage()]
-    assert len(lines) == 1 and "提莫" in lines[0] and "虚幻武器 best" in lines[0] and "首选" in lines[0]
+    assert len(lines) == 1 and "提莫" in lines[0] and "Ethereal Weapon best" in lines[0] and "Best pick:" in lines[0]
 
 
 def test_new_champ_select_clears_previous_hero(store, tmp_path, monkeypatch):

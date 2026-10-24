@@ -10,6 +10,7 @@ os.environ.setdefault("QT_QPA_PLATFORM", "offscreen")
 QtWidgets = pytest.importorskip("PySide6.QtWidgets")
 from PySide6.QtGui import QColor, QImage  # noqa: E402
 
+from lolhex.messages import tr
 from lolhex.vision.window import Rect  # noqa: E402
 
 
@@ -116,7 +117,7 @@ def test_long_label_widens_box():
     y = 430 - 4 - 15                                 # 标签中间一行（只有大字，高 30）
     xs = [x for x in range(0, 1920) if img.pixelColor(x, y).alpha() > 100]
     from PySide6.QtGui import QFont, QFontMetrics
-    need = QFontMetrics(QFont("Microsoft YaHei UI", 12, QFont.Bold), layer).horizontalAdvance(overlay.NODATA_NOTE)
+    need = QFontMetrics(QFont("Microsoft YaHei UI", 12, QFont.Bold), layer).horizontalAdvance(tr("augment.note.nodata"))
     assert xs and max(xs) - min(xs) >= need and abs((max(xs) + min(xs)) / 2 - 950) <= 2
 
 

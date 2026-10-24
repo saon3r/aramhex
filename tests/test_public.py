@@ -44,7 +44,7 @@ def _publish(root, snapshot_at, patch="16.20"):
 def test_bundled_dataset_loads_and_ranks(store):
     st = store.status()
     assert st["dataset"] and st["dataset_patch"] == "16.20" and st["dataset_origin"] == "bundled"
-    assert st["bands_available"] and st["dataset_label"] == "自采统计·16.20版本"
+    assert st["bands_available"] and st["dataset_label"] == "Self-collected stats · patch 16.20"
     assert st["dataset_matches"] == 70000 and st["dataset_collected"] == 72000
     assert store.ranks["heroes"]["17"]["rank"] == 1 and store.ranks["heroes"]["17"]["games"] == 400000
     assert store.ranks["augments"]["1029"]["games"] == 45000  # 所有英雄合计
@@ -52,10 +52,10 @@ def test_bundled_dataset_loads_and_ranks(store):
 
 def test_band_switch_and_fallback(store):
     store.set_band("casual")
-    assert store.win_data("17")["band_label"] == "娱乐"
+    assert store.win_data("17")["band_label"] == "Casual"
     store.set_band("high")
     assert store.effective_band() == "high" and store.ranks["heroes"]["17"]["games"] == 2000
-    assert store.win_data("17")["band_label"] == "前 5%"
+    assert store.win_data("17")["band_label"] == "Top 5%"
     store.set_band("top")  # 1.1.0 以前的「顶尖」：当前 5%（high）
     assert store.effective_band() == "high"
     store.set_band("bogus")
@@ -75,7 +75,7 @@ def test_tampered_file_is_rejected(tmp_path):
     with pytest.raises(DatasetError):
         Dataset(tmp_path / "b", "bundled")
     s = PublicStore(tmp_path / "data", bundled=tmp_path / "b", check_updates=False)
-    assert s.dataset is None and s.win_data("17") is None and "暂无" in s.label()
+    assert s.dataset is None and s.win_data("17") is None and "No stats" in s.label()
 
 
 @pytest.mark.parametrize("bad", ["../evil.json", "/abs.json", "x.exe"])
@@ -149,7 +149,7 @@ def test_sync_disabled_only_offers(tmp_path, server):
     _publish(root, "2026-10-20T00:00:00+08:00", patch="16.21")
     assert s.sync_data(force=True) is False
     assert s.dataset.origin == "bundled" and not (tmp_path / "data" / "public").exists()
-    assert s.data_offer and "16.21 版本" in s.data_offer["text"] and "截至 10-20" in s.data_offer["text"]
+    assert s.data_offer and "patch 16.21" in s.data_offer["text"] and "as of 20 Oct" in s.data_offer["text"]
     assert s.status()["data_offer"] == s.data_offer
     assert s.sync_data(force=True, manual=True) is True
     assert s.dataset.patch == "16.21" and s.data_offer is None
@@ -167,7 +167,7 @@ def test_sync_waits_until_game_ends(tmp_path, server):
     assert s.sync_data() is False and s.dataset.origin == "bundled" and s._last_sync == 0
     in_game[0] = False
     assert s.sync_data() is True and s.dataset.patch == "16.21"
-    assert s.data_note and s.data_note["text"].startswith("数据已更新：16.21 版本，截至 10-20")
+    assert s.data_note and s.data_note["text"].startswith("Stats updated: patch 16.21, as of 20 Oct")
     assert s.status()["data_note"]["id"] == s.dataset.revision
 
 

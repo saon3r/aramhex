@@ -17,7 +17,7 @@ def test_champion_rate_precedes_global(store):
     assert best["basis"] == "hero_win"
     assert best["score"] is not None and best["augment_id"] == "1029"
     assert "all champs" not in recommend.win_text(best)
-    assert "本英雄胜率" in " ".join(best["reasons"])
+    assert "This champion:" in " ".join(best["reasons"])
 
 
 def test_missing_champion_uses_labelled_global(store):

@@ -27,6 +27,7 @@ import time
 from pathlib import Path
 
 from .. import DATA_REPO, MIRROR
+from ..messages import quantity, short_date, tr
 from . import http, metadata
 from .store import CHERRY_AUGMENTS, DataStore, _rarity, _read
 
@@ -464,15 +465,18 @@ class PublicStore(DataStore):
 
     @staticmethod
     def _describe(remote: dict) -> str:
-        """「16.20 版本，截至 10-17，3699 万局」"""
-        parts = [f"{remote['patch']} 版本"] if remote.get("patch") else []
-        if remote.get("snapshot_at"):
-            parts.append("截至 " + str(remote["snapshot_at"])[5:10])
+        """「patch 16.20, as of 17 Oct, 5.1M games」——显示给玩家的文字，走目录。"""
+        parts = []
+        if remote.get("patch"):
+            parts.append(tr("data.describe.patch", patch=remote["patch"]))
+        day = short_date(remote.get("snapshot_at"))
+        if day:
+            parts.append(tr("data.describe.as_of", date=day))
         m = remote.get("matches")
         m = m.get("valid") if isinstance(m, dict) else m
         if isinstance(m, int) and m > 0:
-            parts.append(f"{m / 1e4:.0f} 万局" if m >= 1e4 else f"{m} 局")
-        return "，".join(parts)
+            parts.append(tr("data.describe.games", games=quantity(m)))
+        return tr("common.list_separator").join(parts)
 
     def _look_for_offer(self) -> None:
         """关了自动更新时：只读清单，看看有没有更新的数据（不下载）。连不上就算了，下次再看。"""
@@ -502,7 +506,8 @@ class PublicStore(DataStore):
         if self.reload_dataset():
             self.data_updated_at = time.time()
             self.data_offer = None
-            self.data_note = {"id": self.dataset.revision, "text": "数据已更新：" + self._describe(remote)}
+            self.data_note = {"id": self.dataset.revision,
+                          "text": tr("data.note.updated", summary=self._describe(remote))}
             return True
         return False
 
@@ -557,10 +562,13 @@ class PublicStore(DataStore):
         return {str(aid): v for aid, v in pv.items() if isinstance(v, dict) and v.get("games")} if isinstance(pv, dict) else {}
 
     def label(self) -> str:
+        """数据来源的显示文字（英文；分段在目录里）。"""
         if not self.dataset:
-            return "暂无统计数据"
+            return tr("data.no_stats")
         band = self.effective_band()
-        return f"自采统计·{self.dataset.patch}版本" + (f"·{BANDS[band]}" if band else "")
+        if band:
+            return tr("data.label", patch=self.dataset.patch, band=tr(f"band.{band}"))
+        return tr("data.label_patch", patch=self.dataset.patch)
 
     # ---------- 查询（panel / recommend 用） ----------
 
@@ -587,7 +595,7 @@ class PublicStore(DataStore):
                 "augments": {aid: {"games": a["games"], "wins": a["wins"], "win": a["win_rate"],
                                    "low_sample": a.get("low_sample", False)}
                              for aid, a in (hero_augs.get(str(hero_id)) or {}).items()},
-                "band": band, "band_label": BANDS.get(band)}
+                "band": band, "band_label": tr(f"band.{band}") if band else None}
 
     def _hero_rows(self, name: str, hero_id: str) -> tuple[list[dict], str]:
         """hero_spells / hero_items 里这个英雄的各行：[{key, games, wins, win}]，按局数从多到少。"""
