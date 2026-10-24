@@ -39,12 +39,73 @@ another way. It usually can.
 The owner may ask to be walked through GitHub for learning. That is optional and never a
 dependency — do the work either way.
 
+Two consequences worth spelling out:
+
+- **Report conclusions, not output.** The agent reads the logs, JSON, screenshots and test
+  results, decides pass or fail, and tells the owner what happened in plain English. The
+  owner is never handed evidence to weigh.
+- **Git and GitHub writes are pre-authorised.** Branches, commits, PRs, merges into `main`,
+  issue comments and closures need no owner approval. Ask only when scope, risk or
+  acceptance materially changes — never for a technical choice, a diff or a test result.
+
+## Parallel workers
+
+Fanning out is allowed; shared state is not.
+
+- **Disjoint files only.** No two workers edit one file in a wave. No parallel `git`
+  commands, no parallel merges, no parallel full-suite runs — ever.
+- **One catalog writer.** One worker extracts every key and writes the complete catalog
+  once; after that the catalog is frozen and one worker per UI module changes code only.
+  A worker that finds a missing key returns a proposal; the single catalog writer applies
+  it in a separate, non-parallel phase. No later worker writes the catalog.
+- **Where parallelism pays:** up to 4 concurrent workers while localising UI modules, 1–2
+  elsewhere. Dispatch a wave together in the background, then wait for all of it.
+- **Workers** cannot spawn agents, run the full suite, or touch git unless explicitly
+  assigned; they run only the scoped tests for their own files.
+- **The controller** runs the gates, the full suite and `git diff --check` after each wave,
+  and reviews the combined diff — not each fragment in isolation. What the controller runs
+  is the acceptance signal.
+- **Two failed attempts on one task stop the delegation** for it; the controller takes it
+  over or reports.
+- The owner's rules here override the delegation skill's generic defaults — its ban on
+  parallel agents, its model tiers, and its "every worker runs the suite" contract.
+  Worker, explore and reviewer agents all use the plan's cheap flash model.
+
 ## Current status
+
+### Milestone 2 execution rulings
+
+- Finish the current wave; do not restart or re-plan it. Implementation briefs cover one
+  interface plus tests, at most roughly 10 files. Keep transport/seeding serial; use
+  separate disjoint briefs for portraits, CLI and other follow-ups. Fix briefs contain
+  only failed items and their criterion numbers, not the full original contract.
+- Independent reviewer agents are required only for network-policy/privacy-boundary
+  changes or diffs larger than roughly 10 files. The controller reviews mechanical
+  localisation directly. Mechanical extraction/string conversion needs no red-first
+  cycle; behaviour changes still do.
+- Localisation waves target four workers. Scratch-only key extraction can run alongside
+  the current wave: no product edits and no catalog writes. The single catalog-writer
+  rule remains in force when that inventory is integrated.
+- Task 8 (non-UI rendered-text polish) is deferred to a new issue after milestone 2 closes.
+  Its wider display-text gate does not block milestone 2's strict `lolhex/ui/*.py` gate.
+- If the ten `test_badges_follow_physical_pixels_at_current_qt_scale` cases fail because
+  of environment/DPI, verify once in isolation, quarantine with a skip and linked issue,
+  then stop iterating. Do not quarantine deterministic product regressions.
+- The controller writes AGENTS.md and PRIVACY.md directly; no documentation worker is
+  needed. Stop repeated fix delegations: take over or split remaining work, never send a
+  fourth attempt.
+- Unwaived acceptance: real post-removal app refresh, offline startup, fixture OCR and
+  three rendered badges, live bench recognition, and one full English-game session.
 
 - **Milestone 1 — verified.** Upstream runs unmodified on this client. The augment screen
   is proven against `tests/fixtures/real-mayhem-augment-screen.png`; the app launches.
-  *Still unchecked:* champion select, which needs a live client in a queue.
-- **Next:** milestone 2 — English UI and telemetry removal (issue #3).
+  Champion select was the one unchecked item and was verified live in milestone 2.
+- **Milestone 2 — verified (issue #3).** English UI/catalog gates and the full suite pass
+  (514 tests). Real ordinary refresh, cold/warm offline startup, fixture OCR, three badges,
+  live bench recognition and one full English-client ARAM: Mayhem game are all verified.
+  Known imperfections — a one-cycle `Unknown` flicker on one card and lingering badges — and
+  the deferred non-UI text polish are recorded in the evidence doc and follow-up issue.
+  Evidence: `docs/superpowers/verification/2026-10-24-milestone-2.md`.
 
 ## Environment (already set up on this machine)
 
@@ -66,7 +127,7 @@ On a fresh machine: `py -3.13 -m venv .venv`, then
 # the app (tray icon, overlay; close via the tray menu)
 .venv\Scripts\python.exe -m lolhex
 
-# tests — 308 passing, ~57 s, needs offscreen Qt
+# tests — use offscreen Qt; current results are recorded in the milestone evidence
 $env:QT_QPA_PLATFORM = 'offscreen'; .venv\Scripts\python.exe -m pytest -q
 
 # recognition only, against a still image. The fastest way to check a change.
@@ -113,18 +174,46 @@ These are the reason the fork exists. Do not trade them away:
 | `lolhex/vision/matcher.py` | Fuzzy name matching against the augment list |
 | `lolhex/ui/overlay.py` | In-game layers, badges, click-through window |
 | `lolhex/ui/mainwindow.py` | Main window + tray |
-| `lolhex/data/public.py` | Stats download/cache |
+| `lolhex/data/public.py` | Stats download/cache; dataset seeding |
+| `lolhex/data/metadata.py` | Data Dragon / CommunityDragon parsers, English display helpers |
+| `lolhex/data/store.py` | Offline static seed, per-family refresh, atomic `static.json` cache |
+| `lolhex/data/static_fallback.json` | Pinned offline fallback (id→Data Dragon alias, augment rarity, spell names) with source hashes |
 | `lolhex/data/*.json`, `lolhex/data/bundled/` | Bundled names, aliases, stats |
-| `tests/` | 308 tests; `tests/fixtures/` holds the redacted real capture |
+| `tests/` | Automated suite; `tests/fixtures/` holds the redacted real capture |
 
 Comments and docstrings are Chinese and are the real documentation — keep them.
 
+## Runtime network hosts
+
+All runtime HTTP goes through `lolhex/data/http.py`; it refuses anything not on this list
+before sending. All four are anonymous HTTPS GET only, no cookies/credentials/referer.
+The policy also permits the equivalent `en_GB` Data Dragon metadata paths; the current
+metadata refresher uses `en_US` names.
+
+| Host and path | Exact purpose |
+|---|---|
+| `aramhex.com/u/data/` | stats manifest and stats payloads (primary) |
+| `raw.githubusercontent.com/czgreat/aramhex-data/main/` | stats manifest and payloads (fallback) |
+| `ddragon.leagueoflegends.com/api/versions.json` + `/cdn/<version>/data/en_US/{champion,item}.json` + `/cdn/<version>/img/{champion,item}/…png` | version discovery; en_US champion/item metadata; champion portraits and on-demand item icons |
+| `raw.communitydragon.org/…/global/default/v1/cherry-augments.json` | English augment metadata only (name/rarity); no icons/splash |
+
+No Tencent host (`game.gtimg.cn`, `mlol.qt.qq.com`) and no jsDelivr mirror is contacted by
+the shipped app. Maintenance scripts under `scripts/` are not runtime code and may read wider
+CommunityDragon paths to regenerate bundled tables; they never import Tencent endpoints.
+
 ## Traps we have already hit
 
-- **`game_lang` defaults to `zh_CN`.** English card text matches nothing until it is set
-  to `en_US`. This looked like "OCR is broken" for a whole debugging round.
+- **`game_lang` must match the client language.** Upstream defaulted to `zh_CN`; this fork's
+  `Settings` default is `en_US` (pinned by tests, and old config files without the key load
+  as `en_US`). Wrong language = card names match nothing and looks like "OCR is broken".
+- **Do not derive portrait filenames from display names.** Data Dragon aliases differ from
+  English names and from the old Tencent spellings (`Nunu`, `MonkeyKing`, `Renata`,
+  `Khazix`, `Fiddlesticks` vs `FiddleSticks`). Use `static_fallback.json`; a case-insensitive
+  fallback covers old bundled bytes.
 - **Files are UTF-8 without BOM.** Windows PowerShell 5.1 `Get-Content` mangles them; use
-  `-Encoding UTF8` or the `read` tool.
+  `-Encoding UTF8` or the `read` tool. The same mangling applies to `git show` output piped
+  into a PowerShell string comparison: an em dash comes back as `-`, so an identical section
+  looks changed. Compare with Python or `git diff` before believing a "not identical" result.
 - **Capture resolution varies.** The fixture is 2560×1440; an earlier session logged
   3840×2160. Never hardcode pixels — upstream stores layout as fractions for this reason.
 - **The overlay must not read itself.** Upstream's layers are excluded from capture.
@@ -135,6 +224,27 @@ Comments and docstrings are Chinese and are the real documentation — keep them
 - **The raw capture is not committed.** `screenshots/` is gitignored because it contains
   other players' Riot IDs. `tests/fixtures/real-mayhem-augment-screen.png` is the redacted
   version — use it, and keep future fixtures redacted too.
+- **`bash` on PATH is a broken WSL shim.** The SDD scripts need
+  `& "C:\Program Files\Git\bin\bash.exe" ...`; plain `bash` fails with
+  `execvpe(/bin/bash)`. The `sdd-workspace` script works fine under Git Bash.
+- **`git checkout <branch> -- <file>` stages the file.** When an uncommitted carry is the
+  point (e.g. bringing a later `main` doc onto a milestone branch), use
+  `git restore --source=<branch> --worktree -- <file>` instead.
+- **Deleted modules can still have non-Python callers.** Check release workflows and
+  packaging scripts too; the release workflow used to invoke `python -m lolhex.patch`.
+- **Retired settings can hide in `Settings.extra`.** Add keys written there (such as
+  `logs_sent`) to `REMOVED`, not just the deleted dataclass fields.
+- **Policy tests must use the shipped manifest's paths.** Stats live under
+  `patches/<patch>/normal` (including `normal.pack.xz`); mode-less test-server paths
+  once hid a policy that blocked every real stats payload despite a green suite.
+- **RapidOCR has its own model downloader.** Null model paths can trigger direct
+  `modelscope.cn` requests if a bundled ONNX model is missing, empty or has a bad hash,
+  bypassing our HTTP boundary. Pin local Det/Rec/Cls paths and fail closed; tests must
+  simulate missing/corrupt models without altering the installed model files.
+  Explicit paths bypass the SDK's hash checker; invalid ONNX files and damaged character
+  metadata are regression-tested to fail locally without downloads. If a RapidOCR
+  upgrade renames models, update the pins deliberately; never
+  restore automatic downloads to make an upgrade work.
 
 ## How we work
 

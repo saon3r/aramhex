@@ -11,7 +11,6 @@ import json
 import logging
 import os
 import re
-import secrets
 import sys
 import threading
 import time
@@ -20,8 +19,11 @@ from pathlib import Path
 
 APP_DIR_NAME = "AramHex"
 # 去掉的设置项：老设置文件里有也不再写回（1.1.1 删了 2999 接口；浮窗不再对截图隐身，录屏开关也删了；
-# 自动截图只是调试用，设置页去掉，只在调试模式（debug.txt）下截）
-REMOVED = {"use_liveclient", "allow_capture", "auto_screenshot"}
+# 自动截图只是调试用，设置页去掉，只在调试模式（debug.txt）下截）。
+# 1.1.1 去掉了安装编号、匿名使用统计、上传日志记录、云控强制值和查分：老文件里的这些键读到时丢弃，不再生成、保存或发出去。
+REMOVED = {"use_liveclient", "allow_capture", "auto_screenshot",
+           "install_id", "send_usage", "user_set", "seen_notice", "riot_id", "my_rank",
+           "seen_force", "rank_rechecked", "logs_tries", "logs_sent"}
 # 识别频率：各种扫描间隔乘以这个倍数。电脑配置低时放慢，省 CPU
 SPEEDS = {
     "standard": ("标准（推荐）", 1.0),
@@ -100,44 +102,23 @@ class Settings:
     data_band: str = ""
     # 识别频率（见 SPEEDS）：standard / saver / low。
     speed: str = "standard"
-    # 查分：自己的「名字#编号」和上次查到的结果（{"as_of", "results", "queried_at"}）
-    riot_id: str = ""
-    my_rank: dict = field(default_factory=dict)
-    # 云控公告：已经弹过的公告 id
-    seen_notice: str = ""
     # 上次运行的版本：变了说明刚更新过，提示一次「已更新到 x」
     last_version: str = ""
     # 第一次打开时的「请把游戏设成无边框」提示，看过就不再弹
     seen_welcome: bool = False
-    # 游戏客户端的语言（外服）：zh_CN 中文（国服，繁中台服也认）/ en_US / ja_JP / ko_KR，见 i18n.py。韩文要另外下载识别数据
-    game_lang: str = "zh_CN"
-    # 匿名使用统计：第一次打开时随机生成的编号（和硬件、账号无关，重装就是新的），发往 aramhex.com 的请求带上（见 cloud.headers）。
-    # 界面上不显示；要关就把 config.json 里的 send_usage 改成 false
-    install_id: str = ""
-    send_usage: bool = True
-    # 玩家自己在设置里改过的项（1.1.1）：云控改默认值时不碰这些（见 cloudsettings.py）
-    user_set: list = field(default_factory=list)
+    # 游戏客户端的语言（外服）：zh_CN 中文（国服，繁中台服也认）/ en_US / ja_JP / ko_KR，见 i18n.py。
+    # 新鲜的设置默认按英文客户端识别；游戏里显式选过的语言保留。
+    game_lang: str = "en_US"
     extra: dict = field(default_factory=dict)
 
     def __post_init__(self):
-        self.forced: dict = {}  # 云控正在强制的项 → 玩家原来的值；存文件时写原来的值
         self.debug_mode = False  # 调试模式（debug.txt / --debug / 测试版）：详细日志 + 自动截图；不存进设置文件
-        self._lock = threading.RLock()  # 界面线程和后台线程（上传日志等）都会存设置
+        self._lock = threading.RLock()  # 界面线程和后台线程都会存设置
 
     def set_by_user(self, key: str, value) -> None:
-        """玩家自己改了某一项（设置页、托盘、分段下拉框）：记成玩家改的；云控正在强制这一项时，
-        记下玩家要的值（云控撤掉后用它），当前值仍按强制的。"""
+        """玩家自己改了某一项（设置页、托盘、分段下拉框）后直接生效。"""
         with self._lock:
-            self.mark_user(key)
-            if key in self.forced:
-                self.forced[key] = value
-            else:
-                setattr(self, key, value)
-
-    def mark_user(self, *keys: str) -> None:
-        for k in keys:
-            if k not in self.user_set:
-                self.user_set.append(k)
+            setattr(self, key, value)
 
     @classmethod
     def load(cls, path: Path | None = None) -> "Settings":
@@ -145,29 +126,16 @@ class Settings:
         log = logging.getLogger(__name__)
         data: dict = {}
         broken = False
-        raw = b""
         if path.exists():
             try:
-                raw = path.read_bytes()
-                data = _parse_config(raw)
+                data = _parse_config(path.read_bytes())
             except (OSError, ValueError) as e:
                 broken = True
                 log.warning("设置文件读不了：%s", e)
         known = {f.name for f in fields(cls)}
         s = cls(**{k: v for k, v in data.items() if k in known and k != "extra"})
         s.extra = {k: v for k, v in data.items() if k not in known and k not in REMOVED}
-        if not isinstance(s.user_set, list):
-            s.user_set = []
-        if data and "user_set" not in data:
-            # 1.1.0 以前的设置文件没记谁改过：和默认值不一样的就当玩家自己改的，云控改默认值时不碰
-            dflt = cls()
-            s.user_set = [f.name for f in fields(cls) if f.name in data and f.name not in ("extra", "user_set")
-                          and getattr(s, f.name) != getattr(dflt, f.name)]
         s.fresh_install = not data and not broken  # 没有设置文件：第一次装（用来区分「刚安装」和「刚更新」）
-        if not isinstance(s.install_id, str) or not re.fullmatch(r"[0-9a-f]{16}", s.install_id):
-            s.install_id = ""  # 手改坏了：重新生成（不是字符串时请求头发不出去）
-        if not isinstance(s.send_usage, bool):
-            s.send_usage = str(s.send_usage).strip().lower() in ("true", "1", "yes", "on")  # 认不出就当关了
         from .i18n import normalize_lang
         s.game_lang = normalize_lang(s.game_lang)  # 以前的繁中选项 zh_TW、手改的怪值都当中文
         # 1.1.1：设置页去掉「显示胜率数字」（用这个软件就是要看胜率），以前关掉的也打开
@@ -175,10 +143,7 @@ class Settings:
         if s.data_band == "top":
             s.data_band = "high"  # 1.1.1 去掉「顶尖」，和「高分」合成「前 5%」
         if broken:
-            # 实在读不懂：原文件留个备份，后面照常写新的；用户在里面关没关匿名统计看不出来，这次就当关了，
-            # 能从原文里找到 "send_usage": true/false 就照它的
-            m = re.search(rb'"send_usage"\s*:\s*(true|false)', raw)
-            s.send_usage = bool(m) and m.group(1) == b"true"
+            # 实在读不懂：原文件留个备份，后面照常写新的
             s.seen_welcome = True  # 不是新装，别再弹欢迎框
             backup = path.with_name(path.name + ".broken")
             if backup.exists():  # 以前也坏过：不覆盖上一次的备份
@@ -188,9 +153,8 @@ class Settings:
                 log.warning("坏的设置文件改名为 %s，这次用默认设置", backup.name)
             except OSError as e:
                 log.warning("坏的设置文件没法改名：%s", e)
-        if not s.install_id or not path.exists():
-            s.install_id = s.install_id or secrets.token_hex(8)
-            s.save(path)
+        if not path.exists():
+            s.save(path)  # 第一次装 / 刚备份完坏文件：写出默认值，方便手改
         return s
 
     @property
@@ -202,7 +166,6 @@ class Settings:
         path = path or app_home() / "config.json"
         with self._lock:
             data = asdict(self)
-            data.update(self.forced)  # 云控强制的项存玩家原来的值：云控撤掉就恢复
             extra = data.pop("extra", {}) or {}
             data.update(extra)
             text = json.dumps(data, ensure_ascii=False, indent=2)

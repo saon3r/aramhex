@@ -19,10 +19,11 @@ from PySide6.QtGui import QColor, QCursor, QFont, QFontMetrics, QGuiApplication,
 from PySide6.QtWidgets import (QApplication, QHBoxLayout, QLabel, QLineEdit, QPushButton,
                                QVBoxLayout, QWidget)
 
-from .. import cloud, recommend
+from .. import recommend
+from ..data.metadata import display_augment_name, display_hero_name, display_hero_title
+from ..messages import tr
 from ..recommend import NODATA_NOTE
 from ..vision import window as win
-from .. import patch
 from . import buildview, single_instance
 from .autoshot import AutoShot
 
@@ -31,13 +32,19 @@ from .herosearch import hero_completer
 
 log = logging.getLogger(__name__)
 
-RARITY_CN = {"silver": "白银", "gold": "黄金", "prismatic": "棱彩"}
-VERDICT = {"best": ("首选", QColor(95, 211, 141)), "ok": ("可选", QColor(98, 168, 255)),
-           "reroll": ("可考虑刷新", QColor(255, 122, 107)), "unknown": ("未知", QColor(150, 150, 150)),
-           "nodata": ("无数据", QColor(150, 150, 150))}
+# 机器码不动，只有显示文字走目录（verdict.* / rarity.*）。
+RARITY_CODES = frozenset({"silver", "gold", "prismatic"})
+VERDICT = {"best": QColor(95, 211, 141), "ok": QColor(98, 168, 255),
+           "reroll": QColor(255, 122, 107), "unknown": QColor(150, 150, 150),
+           "nodata": QColor(150, 150, 150)}
 
 
 AUTO_HIDE_SECONDS = 5
+# 大厅里助手图标的位置（客户端 1280×720 下的像素，按窗口高度等比例）：图标中心离右边、离上边，直径。
+# 以前从云控读，现在固定成本地常量（默认值就是原云控默认值）。
+CLIENT_BADGE_RIGHT = 60
+CLIENT_BADGE_TOP = 53
+CLIENT_BADGE_SIZE = 26
 
 
 def _dpr() -> float:
@@ -69,7 +76,7 @@ def _unit(height: int) -> float:
 
 
 def _rect_text(r) -> str:
-    return f"{r.left},{r.top} {r.width}x{r.height}" if r else "无"
+    return f"{r.left},{r.top} {r.width}x{r.height}" if r else "none"
 
 
 # 标签放在卡片下方时，标签底边在标题中心往下多少（1080P 像素）：卡片内框底边约在 248
@@ -83,7 +90,7 @@ class _Layer(QWidget):
     换算成 Qt 坐标再摆、从不核对，Windows 缩放不是 100%（例如 2K 屏 125%、游戏开 1080P 窗口）时
     有玩家看到标签放大、偏到卡片外面。位置或缩放有变化时记一行日志，方便查问题。"""
 
-    name = "标注层"
+    name = "BadgeLayer"
 
     def __init__(self):
         super().__init__()
@@ -132,11 +139,11 @@ class _Layer(QWidget):
         key = (rect, actual, round(self._scale(), 3))
         if key != self._diag:
             self._diag = key
-            screens = "；".join(
+            screens = "; ".join(
                 f"{sc.name()} {sc.geometry().x()},{sc.geometry().y()} {sc.geometry().width()}x{sc.geometry().height()}"
-                f" 缩放{sc.devicePixelRatio():g}" for sc in QGuiApplication.screens())
+                f" scale {sc.devicePixelRatio():g}" for sc in QGuiApplication.screens())
             (log.warning if actual != rect else log.info)(
-                "%s：要盖住 %s，实际 %s，浮层缩放 %g；目标窗口 %s；本程序 %s；屏幕 %s", self.name,
+                "%s: should cover %s, actual %s, overlay scale %g; target window %s; app %s; screens %s", self.name,
                 _rect_text(rect), _rect_text(actual), self._scale(), win.dpi_info(target_hwnd) or "?",
                 win.dpi_info() or "?", screens)
 
@@ -144,7 +151,7 @@ class _Layer(QWidget):
 class BadgeLayer(_Layer):
     """覆盖游戏客户区的透明层，只画三张卡的标签。"""
 
-    name = "三选一标签"
+    name = "AugmentBadge"
 
     def __init__(self):
         super().__init__()
@@ -193,29 +200,32 @@ class BadgeLayer(_Layer):
             x1 = (box[2] - ox) / unit
             y0 = (box[1] - oy) / unit
             cx = (x0 + x1) / 2
-            label, color = VERDICT.get(r["verdict"], VERDICT["unknown"])
+            code = r["verdict"] if r["verdict"] in VERDICT else "unknown"
+            label, color = tr(f"verdict.{code}"), VERDICT[code]
             if r.get("basis") == "excluded":  # 尊我为王这类：写明原因，免得以为是助手没数据
-                label = NODATA_NOTE
+                label = tr("augment.note.nodata")
             if r.get("thin") == "too_few":
-                label = "样本太少 · 建议刷新"
+                label = tr("overlay.badge.too_few")
             lines = []
             if r.get("score") is not None:
                 s = f"{r['score']:+.1f}"
                 if show_win and recommend.win_text(r):
                     s += " · " + recommend.win_text(r)
                 lines.append(s)
+            else:
+                wt = recommend.win_text(r)
+                if wt:
+                    lines.append(wt)
             meta = []
             if r.get("rarity") and r.get("rank"):
-                metric = "胜率" if r.get("rank_basis") == "hero_rarity_win_rate" else ""
-                meta.append(f"{RARITY_CN.get(r['rarity'], '')}{metric}第{r['rank']}/{r.get('rank_total') or '?'}")
-            if r.get("tier"):
-                meta.append(f"{r['tier']}级")
-            if r.get("basis") == "tier_only":
-                meta.append("按官方层级")
+                rarity = tr(f"rarity.{r['rarity']}") if r["rarity"] in RARITY_CODES else ""
+                key = ("overlay.badge.rarity_win_rank" if r.get("rank_basis") == "hero_rarity_win_rate"
+                       else "overlay.badge.rarity_rank")
+                meta.append(tr(key, rarity=rarity, rank=r["rank"], total=r.get("rank_total") or "?"))
             if r.get("basis") == "pbe" and r.get("pbe_games"):  # 新海克斯先用测试服数据：直接给局数和胜率，看得出高低
-                meta.append(f"测试服 {r['pbe_games']} 局 胜率{_pct(r['pbe_win'])}")
+                meta.append(tr("overlay.badge.pbe", games=r["pbe_games"], win=_pct(r["pbe_win"])))
             if r.get("thin") == "few":
-                meta.insert(0, "样本偏少")
+                meta.insert(0, tr("sample.few"))
             if meta:
                 lines.append(" · ".join(meta))
             # 标题框只是标题文字那么宽（还没校准时）：字长的（尊我为王那句）按字撑开，不让底框比字窄
@@ -257,12 +267,13 @@ class BadgeLayer(_Layer):
 
     def _paint_item_hint(self, p, hint, cx, y0, yc, below, fm, show_win):
         rows = hint["items"][:3]
-        source = {"stats": "统计参考", "community": "社区推荐", "manual": "人工推荐"}[hint["source"]]
+        source = {code: tr(f"overlay.item_hint.source.{code}")
+                  for code in ("stats", "community", "manual")}[hint["source"]]
         texts = []
         for row in rows:
             text = row["name"]
             if show_win and row.get("win") is not None:
-                text += f"  {_pct(row['win'])}（{row['games']}局）"
+                text += tr("overlay.item_hint.row", win=_pct(row["win"]), games=row["games"])
             texts.append(text)
         width = min(340, max(240, max((fm.horizontalAdvance(t) + 46 for t in texts), default=240)))
         height = 42 + 28 * len(rows)
@@ -271,7 +282,8 @@ class BadgeLayer(_Layer):
         p.setBrush(QColor(10, 12, 16, 230))
         p.drawRoundedRect(rect, 6, 6)
         p.setPen(QColor(231, 195, 90))
-        p.drawText(QRect(rect.x() + 8, rect.y() + 3, width - 16, 18), Qt.AlignLeft, "首件传说装备 · " + source)
+        p.drawText(QRect(rect.x() + 8, rect.y() + 3, width - 16, 18), Qt.AlignLeft,
+                   tr("overlay.item_hint.title", source=source))
         p.setPen(QColor(225, 228, 235))
         for i, (row, text) in enumerate(zip(rows, texts)):
             y = rect.y() + 23 + i * 28
@@ -283,7 +295,7 @@ class BadgeLayer(_Layer):
                        fm.elidedText(text, Qt.ElideRight, width - 46))
         p.setPen(QColor(170, 176, 190))
         p.drawText(QRect(rect.x() + 8, rect.bottom() - 17, width - 16, 16), Qt.AlignLeft,
-                   "还没出首件传说装备的话，可以考虑")
+                   tr("overlay.item_hint.footer"))
         return rect
 
 
@@ -305,12 +317,14 @@ def win_color(win) -> QColor:
 
 def champ_select_summary(cs: dict, show_win: bool = True) -> str:
     """浮窗/主界面用的一行汇总：待选栏按胜率排序，和自己当前英雄比较。"""
+    sep = tr("common.list_separator")
     mine = next((t for t in cs.get("team") or [] if t["hero_id"] == cs.get("mine")), None)
     my_win = (mine or {}).get("win")
     bench = sorted(cs.get("bench") or [], key=lambda b: -(b.get("win") or 0))
     items = []
     for b in bench:
-        txt = f"{b.get('name') or b['hero_id']} {b.get('grade') or ''}"
+        name = escape(display_hero_name(b.get("hero_id")))
+        txt = f"{name} {b.get('grade') or ''}"
         if show_win and b.get("win") is not None:
             txt += f" {_pct(b['win'])}"
         if my_win is not None and b.get("win") is not None and b["win"] > my_win:
@@ -318,13 +332,15 @@ def champ_select_summary(cs: dict, show_win: bool = True) -> str:
         items.append(txt)
     if cs.get("cards"):
         cards = sorted(cs["cards"], key=lambda c: -(c.get("win") or 0))
-        return "开局选英雄：" + "、".join(
-            f"{c.get('name') or c['hero_id']} {c.get('grade') or ''}{' ' + _pct(c.get('win')) if show_win else ''}"
+        return tr("champselect.summary.cards") + " " + sep.join(
+            f"{escape(display_hero_name(c.get('hero_id')))} {c.get('grade') or ''}"
+            f"{' ' + _pct(c.get('win')) if show_win else ''}"
             for c in cards)
-    head = "待选栏"
+    head = tr("champselect.summary.bench")
     if mine:
-        head += f"（你：{mine.get('name')} {mine.get('grade') or ''}{' ' + _pct(my_win) if show_win else ''}）"
-    return f"{head}：" + "、".join(items)
+        head += tr("champselect.summary.mine", name=escape(display_hero_name(mine.get("hero_id"))),
+                   grade=mine.get("grade") or "", win=" " + _pct(my_win) if show_win else "")
+    return head + ": " + sep.join(items)
 
 
 class ChampSelectLayer(_Layer):
@@ -332,7 +348,7 @@ class ChampSelectLayer(_Layer):
     预选栏里胜率比自己当前英雄高的标绿，最高的那个加金框（值得换）。
     覆盖客户端窗口，对鼠标完全透明，不挡点击。"""
 
-    name = "选英雄标注"
+    name = "ChampSelectBadge"
 
     def __init__(self):
         super().__init__()
@@ -426,17 +442,20 @@ class ChampSelectLayer(_Layer):
                                Qt.AlignVCenter | Qt.AlignLeft, win_txt)
                 if kind == "team":
                     is_me = s["hero_id"] == cs.get("mine")
-                    sub = f"第{s['rank']}/{s.get('total') or '?'}" if s.get("rank") else ""
+                    rank = (tr("champselect.team.rank", rank=s["rank"], total=s.get("total") or "?")
+                            if s.get("rank") else "")
+                    sub = tr("champselect.team.me", rank=rank) if is_me else rank
                     p.setFont(small)
                     p.setPen(QColor(240, 200, 90) if is_me else QColor(170, 176, 190))
                     p.drawText(QRect(r.x(), line.bottom(), r.width(), r.bottom() - line.bottom()),
-                               Qt.AlignHCenter | Qt.AlignTop, ("我 · " if is_me else "") + sub)
+                               Qt.AlignHCenter | Qt.AlignTop, sub)
                 elif kind == "cards":
-                    sub = f"胜率第{s['rank']}/{s.get('total') or '?'}" if s.get("rank") else ""
+                    sub = (tr("champselect.cards.win_rank", rank=s["rank"], total=s.get("total") or "?")
+                           if s.get("rank") else "")
                     p.setFont(small)
                     p.setPen(QColor(240, 200, 90) if s is best_card else QColor(170, 176, 190))
                     p.drawText(QRect(r.x(), line.bottom(), r.width(), r.bottom() - line.bottom()),
-                               Qt.AlignHCenter | Qt.AlignTop, "★ 推荐" if s is best_card else sub)
+                               Qt.AlignHCenter | Qt.AlignTop, tr("champselect.cards.best") if s is best_card else sub)
         p.end()
         self._publish(drawn, dpr)
 
@@ -444,16 +463,9 @@ class ChampSelectLayer(_Layer):
 def client_badge(rect) -> tuple[int, int, int]:
     """客户端窗口（物理像素）→ 大厅图标的中心 x、y 和直径（物理像素）。
     客户端界面按窗口大小整体缩放，所以用 1280×720 下量的位置乘以「窗口高度 / 720」。"""
-    ui = cloud.get().get("ui") or {}
-
-    def num(key, default, lo, hi):
-        v = ui.get(key, default)
-        return v if isinstance(v, (int, float)) and lo <= v <= hi else default
     s = rect.height / 720
-    right = num("client_badge_right", 60, 10, 400)
-    top = num("client_badge_top", 53, 10, 300)
-    size = num("client_badge_size", 26, 16, 60)
-    return round(rect.right - right * s), round(rect.top + top * s), round(size * s)
+    return (round(rect.right - CLIENT_BADGE_RIGHT * s), round(rect.top + CLIENT_BADGE_TOP * s),
+            round(CLIENT_BADGE_SIZE * s))
 
 
 class ControlPanel(QWidget):
@@ -495,7 +507,7 @@ class ControlPanel(QWidget):
         self.btn = QPushButton()
         self.btn.setIcon(app_icon())
         self.btn.setIconSize(QSize(30, 30))
-        self.btn.setToolTip("海克斯大乱斗助手：点击展开/收起")
+        self.btn.setToolTip(tr("overlay.button.tooltip"))
         self.btn.setFixedSize(40, 40)
         self.btn.setCursor(Qt.PointingHandCursor)
         self.btn.setStyleSheet(self.BTN_STYLE % 20)
@@ -522,16 +534,16 @@ class ControlPanel(QWidget):
         self.cands = QHBoxLayout()
         self.cands.setSpacing(4)
         self.search = QLineEdit()
-        self.search.setPlaceholderText("搜英雄手动选择：提莫 / 提百万 / tm")
+        self.search.setPlaceholderText(tr("overlay.search.placeholder"))
         self._completer_ready = False
         self.search.returnPressed.connect(self._search_pick)
         self.search.installEventFilter(self)
-        self.confirm_hero = QPushButton("确认")
+        self.confirm_hero = QPushButton(tr("common.confirm"))
         self.confirm_hero.clicked.connect(self._search_pick)
         search_row = QHBoxLayout()
         search_row.addWidget(self.search, 1)
         search_row.addWidget(self.confirm_hero)
-        self.search_feedback = QLabel("未找到英雄，请输入英雄名或从候选项选择")
+        self.search_feedback = QLabel(tr("overlay.search.not_found"))
         self.search_feedback.setWordWrap(True)
         self.search_feedback.setStyleSheet("color:#e7c35a")
         self.search_feedback.hide()
@@ -603,7 +615,8 @@ class ControlPanel(QWidget):
                 win.add_companion(hb)  # 点详情不算离开客户端
                 bw.show()
                 if win.window_rect(hb) != target:  # Qt 显示时按它记的位置又挪了：摆回来
-                    log.debug("浮窗详情：显示后位置 %s，应为 %s", _rect_text(win.window_rect(hb)), _rect_text(target))
+                    log.debug("Overlay body: position after show %s, expected %s",
+                              _rect_text(win.window_rect(hb)), _rect_text(target))
                     win.set_window_rect(hb, target)
         else:
             x = self.x() + self.width() - bw.width() if self.corner == "top-right" else self.x()
@@ -614,7 +627,7 @@ class ControlPanel(QWidget):
     def toggle(self):
         self.expanded = not self.expanded
         self._away_since, self._hovered, self._auto_opened = None, False, False
-        log.debug("浮窗%s", "展开" if self.expanded else "收起")
+        log.debug("Overlay %s", "expanded" if self.expanded else "collapsed")
         self._place_body()
 
     def _click_toggle(self):
@@ -652,7 +665,7 @@ class ControlPanel(QWidget):
         if self._away_since is None:
             self._away_since = now
         elif now - self._away_since >= AUTO_HIDE_SECONDS:
-            log.debug("浮窗：鼠标离开 %d 秒，自动收起（%s）", AUTO_HIDE_SECONDS, phase)
+            log.debug("Overlay: cursor away for %d s, auto-collapsed (%s)", AUTO_HIDE_SECONDS, phase)
             self.toggle()
 
     def _ensure_completer(self):
@@ -719,9 +732,9 @@ class ControlPanel(QWidget):
                 key = (_rect_text(rect), in_client, x, y, cur.width, cur.height)
                 if key != getattr(self, "_place_logged", None):
                     self._place_logged = key
-                    log.debug("浮窗摆放：%s 窗口 %s，图标 %s，浮窗现在 %s → 摆到 %d,%d（%s，缩放 %g）",
-                              "客户端" if in_client else "游戏", _rect_text(rect), badge, _rect_text(cur), x, y,
-                              "展开" if self.expanded else "收起", k)
+                    log.debug("Overlay placement: %s window %s, icon %s, overlay now %s -> move to %d,%d (%s, scale %g)",
+                              "client" if in_client else "game", _rect_text(rect), badge, _rect_text(cur), x, y,
+                              "expanded" if self.expanded else "collapsed", k)
                 if (cur.left, cur.top) != (x, y):
                     win.set_window_rect(hwnd, win.Rect(x, y, cur.width, cur.height))
                     self._publish()  # SetWindowPos 不一定触发 Qt 的 moveEvent
@@ -751,7 +764,7 @@ class ControlPanel(QWidget):
             if w:
                 w.deleteLater()
         for c in cands[:5]:
-            b = QPushButton(c.get("name") or c.get("id"))
+            b = QPushButton(display_hero_name(c.get("id")))
             b.clicked.connect(lambda _=False, hid=c.get("id"): (self.engine.set_hero(hid), self.give_back_focus()))
             self.cands.addWidget(b)
         self.cands.addStretch(1)
@@ -765,13 +778,13 @@ class ControlPanel(QWidget):
             self._missing_hero_notified = True
             if not self.expanded:
                 self.toggle()
-            log.info("未识别到英雄，请手动选择")
+            log.info("No champion recognised - pick one manually")
         if not hid:
             self._auto_opened_for = None  # 英雄清掉了（新的一把）：下一把同一个英雄也再自动展开
         if hid and snap.get("phase") == "client" and self._auto_opened_for != hid:
             self._auto_opened_for = hid
             if not self.expanded:
-                log.debug("选英雄：认出英雄 %s，浮窗自动展开", hid)
+                log.debug("Champ select: champion %s recognised, overlay auto-expanded", hid)
                 self.toggle()
                 self._auto_opened = True
         if not self.expanded:
@@ -785,16 +798,18 @@ class ControlPanel(QWidget):
             b = self.engine.hero_brief(hid)
             rating = []
             if b.get("grade"):
-                rating.append(f"评级 {b['grade']}")
+                rating.append(tr("stats.grade", grade=b["grade"]))
             if b.get("rank"):
-                rating.append(f"胜率第{b['rank']}/{b.get('total') or '?'}")
+                rating.append(tr("stats.win_rank_short", rank=b["rank"], total=b.get("total") or "?"))
             if show_win and r.get("win") is not None:
-                rating.append(f"胜率 {_pct(r['win'])}")
+                rating.append(tr("stats.winrate", pct=_pct(r["win"])))
             if r.get("pick") is not None:
-                rating.append(f"出场 {_pct(r['pick'])}")
-            hero_html = f"<b style='color:#e7c35a;font-size:14px'>{h['name']}</b> {h['nick']}<br>{' · '.join(rating)}"
+                rating.append(tr("stats.pickrate", pct=_pct(r["pick"])))
+            name, title = escape(display_hero_name(hid)), escape(display_hero_title(hid))
+            hero_html = (f"<b style='color:#e7c35a;font-size:14px'>{name}</b> {title}"
+                         f"<br>{' · '.join(rating)}")
         else:
-            hero_html = "<span style='color:#e7c35a'>未识别到英雄，请手动选择</span>"
+            hero_html = f"<span style='color:#e7c35a'>{tr('hero.none_selected')}</span>"
         if self.hero_label.text() != hero_html:
             self.hero_label.setText(hero_html)
         self._set_candidates(snap.get("candidates") or [])
@@ -811,18 +826,16 @@ class ControlPanel(QWidget):
                 parts.append(f"<span style='color:#c9a0ff'>{escape(pk)}</span>")
         if d:
             parts.extend(buildview.lines(d, self.engine.icons, show_win, size=22, compact=True))
-            sk = buildview.skills_line(d, show_win)
-            if sk:
-                parts.append(sk)
             top = [a for a in d.get("augments", []) if a.get("delta") is not None and a.get("sample") != "low"]
             top.sort(key=lambda a: -a["delta"])
             if top:
-                parts.append("推荐海克斯：" + "、".join(f"{a['name']}({a['delta']:+.1f})" for a in top[:5]))
+                parts.append(tr("augment.recommended_label") + " " + tr("common.list_separator").join(
+                    f"{escape(display_augment_name(a.get('id')))}({a['delta']:+.1f})" for a in top[:5]))
         if snap.get("vision", {}).get("blank"):
-            parts.append("<span style='color:#ff7a6b'>游戏可能是全屏模式，无法识别。请在游戏内设置-窗口模式中选择无边框/窗口。</span>")
+            parts.append(f"<span style='color:#ff7a6b'>{tr('warning.fullscreen')}</span>")
         parts.append(f"<span style='color:#8b93a7'>{data_status_html(snap.get('data', {}))}</span>")
-        parts.append("<a href='rescan' style='color:#62a8ff'>重新识别</a>　"
-                     "<a href='quit' style='color:#ff7a6b'>退出助手</a>")
+        parts.append(f"<a href='rescan' style='color:#62a8ff'>{tr('common.rescan')}</a>&nbsp;&nbsp;"
+                     f"<a href='quit' style='color:#ff7a6b'>{tr('overlay.link.quit')}</a>")
         html = "<br>".join(parts)
         if self.info.text() != html:
             self.info.setText(html)
@@ -859,7 +872,7 @@ class Overlay:
             self._blank_warned = True  # 每次打开软件最多提醒一次
             notify = getattr(self, "notify", None)
             if notify:
-                notify("游戏可能是全屏模式，无法识别。请在游戏内设置-窗口模式中选择无边框/窗口。")
+                notify(tr("warning.fullscreen"))
         game = win.find_game_window()
         grect = win.client_rect(game) if game else None
         self.badges.update_from(snap, grect, game)
@@ -875,11 +888,11 @@ class Overlay:
         rect = grect or crect
         if rect is None:
             if self.panel.isVisible():
-                log.debug("浮窗：游戏和客户端窗口都找不到，隐藏")
+                log.debug("Overlay: neither game nor client window found, hiding")
             self.panel.hide()
             return
         if not self.panel.isVisible():
-            log.debug("浮窗：显示（%s）", "游戏" if grect else "客户端")
+            log.debug("Overlay: showing (%s)", "game" if grect else "client")
             self.panel.show()
         self.panel.place(rect, in_client=grect is None)
 
@@ -896,7 +909,7 @@ def version_notice(settings) -> str | None:
         return None
     settings.last_version = __version__
     settings.save()
-    return f"已更新到 {__version__}" if last or not getattr(settings, "fresh_install", True) else None
+    return tr("overlay.version.updated", version=__version__) if last or not getattr(settings, "fresh_install", True) else None
 
 
 def run(make_engine, minimized: bool = False) -> int:
@@ -910,7 +923,7 @@ def run(make_engine, minimized: bool = False) -> int:
 
     app = QApplication.instance() or QApplication(sys.argv)
     app.setQuitOnLastWindowClosed(False)
-    app.setApplicationName("海克斯大乱斗助手")
+    app.setApplicationName(tr("app.name"))
     app.setWindowIcon(app_icon())
     # 界面颜色是按浅色配的（卡片底色、灰字写死）：不跟随 Windows 深色模式，否则白字压在浅色卡片上看不见
     app.styleHints().setColorScheme(Qt.ColorScheme.Light)
@@ -935,9 +948,8 @@ def run(make_engine, minimized: bool = False) -> int:
             return 0
         if single_instance.denied:  # 通知不到以管理员身份运行的那个：告诉玩家它在哪，不再起第二个
             from PySide6.QtWidgets import QMessageBox
-            QMessageBox.information(None, "海克斯大乱斗助手",
-                                    "助手已经在运行（是以管理员身份打开的），请在屏幕右下角托盘里找它。\n"
-                                    "想换成普通方式打开，先在托盘图标上右键退出它。")
+            QMessageBox.information(None, tr("dialog.single_instance.title"),
+                                    tr("dialog.single_instance.body"))
             return 0
         if not single_instance.acquire(name, 10_000):
             return 0
@@ -959,28 +971,19 @@ def run(make_engine, minimized: bool = False) -> int:
         if conn:
             conn.readAll()
         main_win.show_and_raise()
-        main_win.check_update()  # 用户再点一次图标：顺便查更新，不用退出重开
 
     server.newConnection.connect(on_second_instance)
     note = version_notice(engine.settings)
     if note:
-        tray.showMessage("海克斯大乱斗助手", note, app_icon(), 8000)
-    ov.notify = lambda text: tray.showMessage("海克斯大乱斗助手", text, app_icon(), 12000)
+        tray.showMessage(tr("app.name"), note, app_icon(), 8000)
+    ov.notify = lambda text: tray.showMessage(tr("app.name"), text, app_icon(), 12000)
     if not engine.settings.seen_welcome:
         def welcome():
             engine.settings.seen_welcome = True
             engine.settings.save()
             from PySide6.QtWidgets import QMessageBox
-            QMessageBox.information(main_win, "使用前", "请在游戏内设置-窗口模式中选择无边框/窗口。\n\n"
-                                    "全屏模式下截不到画面，识别不了。")
+            QMessageBox.information(main_win, tr("dialog.welcome.title"), tr("dialog.welcome.body"))
         QTimer.singleShot(1200, welcome)
-    failed = patch.take_failure()
-    if failed:
-        log.warning("上次更新没装上：%s", failed)
-        tray.showMessage("海克斯大乱斗助手", "上次更新没有装上，已恢复原版本。打开主界面点「立即更新」再试一次。",
-                         app_icon(), 10000)
-    main_win.check_update()
-    main_win.refresh_rank_if_stale()
     if not minimized:
         main_win.show_and_raise()
     app._keep = (ov, main_win, tray, server)  # 保持引用

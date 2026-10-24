@@ -43,7 +43,6 @@ def test_lobby_wait_keeps_hero_until_next_champ_select(store, tmp_path, monkeypa
     import lolhex.engine as module
     now = [1000.0]
     monkeypatch.setattr(module.time, "monotonic", lambda: now[0])
-    monkeypatch.setattr(Engine, "_prefetch_hero", lambda *args: None)
     eng = Engine(Settings(), home=tmp_path, store=store)
     eng._apply_champ_select({"mine": "17", "team": [], "bench": []})
     eng._apply_champ_select(False)
@@ -79,8 +78,7 @@ def test_newer_data_recalculation_wins_over_older_inflight_result(store, tmp_pat
     assert eng.state["evaluation"]["test_generation"] == "new"
 
 
-def test_game_end_then_new_game_has_no_previous_card_or_manual_hero(store, tmp_path, monkeypatch):
-    monkeypatch.setattr(Engine, "_prefetch_hero", lambda *args: None)
+def test_game_end_then_new_game_has_no_previous_card_or_manual_hero(store, tmp_path):
     eng = Engine(Settings(), home=tmp_path, store=store)
     eng.set_hero("17")
     eng._set(phase="ingame")

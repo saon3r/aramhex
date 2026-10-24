@@ -66,8 +66,9 @@ def _scan_image(engine, path: str, hero: str | None) -> int:
     ev = recommend.evaluate(engine.store, hid, offer.slots, engine.settings.smoothing_games)
     out = {"size": [img.shape[1], img.shape[0]], "texts": offer.texts, "slots": offer.slots,
            "calibration": det.calibration.boxes if det.calibration else None,
-           "advice": ev["advice"],
-           "cards": [{k: r.get(k) for k in ("name", "rarity", "tier", "rank", "win", "games", "score", "verdict", "reasons")}
+           "advice": ev["advice"], "sources": ev["sources"],
+           "cards": [{k: r.get(k) for k in ("name", "rarity", "rank", "win", "games", "score", "verdict",
+                                            "basis", "rate_label", "source", "reasons")}
                      for r in ev["slots"]]}
     print(json.dumps(out, ensure_ascii=False, indent=2))
     return 0
@@ -89,7 +90,7 @@ def main(argv=None) -> int:
         return run(args.self_test_gui)
 
     _fix_stdio()
-    from . import BETA, __version__, cloud
+    from . import BETA, __version__
     # 调试模式：命令行 --debug、测试版，或者程序文件夹 / 数据文件夹里放一个 debug.txt（正式版同一个程序，
     # 方便复现问题时打开；删掉文件就恢复）。调试模式写详细日志，三选一和选英雄时自动截图
     debug_file = any((d / "debug.txt").is_file() for d in (program_dir(), app_home()))
@@ -98,10 +99,6 @@ def main(argv=None) -> int:
         logging.getLogger("lolhex").info("发现 debug.txt：调试模式（详细日志、自动截图）")
     settings = Settings.load()
     settings.debug_mode = bool(args.debug or BETA or debug_file)
-    cloud.set_install_id(settings.install_id if settings.send_usage else None)
-    from . import cloudsettings
-    if cloudsettings.apply(settings, cloud.get(), __version__)["changed"]:  # 上次存下的云控：断网也照样生效
-        settings.save()
     logging.getLogger("lolhex").info("海克斯大乱斗助手 %s 启动；目录：%s；参数：%s", __version__,
                                      app_home(), " ".join(sys.argv[1:]) or "（无）")
 
@@ -110,8 +107,10 @@ def main(argv=None) -> int:
     if args.refresh:
         engine = Engine(settings)
         engine.store.refresh(force=True)
-        print(json.dumps(engine.store.status(), ensure_ascii=False, indent=2))
-        return 0 if not engine.store.last_error else 1
+        status = engine.store.status()
+        print(json.dumps(status, ensure_ascii=False, indent=2))
+        # 刷新失败不等于没数据：有校验通过的下载/内置数据集就仍然可用（错误照实写在 JSON 里）。
+        return 0 if getattr(engine.store, "dataset", None) is not None else 1
     if args.scan_image:
         return _scan_image(Engine(settings), args.scan_image, args.hero)
 

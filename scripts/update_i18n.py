@@ -2,13 +2,13 @@
 
     python scripts/update_i18n.py [--out lolhex/data/i18n.json]
 
-来源都是拳头公开数据：
-- 海克斯：CommunityDragon 的 kiwi.bin.json（AugmentPlatformId 就是腾讯的海克斯 ID）+ 各语言 lol.stringtable.json。
+来源都是拳头公开数据（维护脚本，不随程序运行）：
+- 海克斯：CommunityDragon 的 kiwi.bin.json（AugmentPlatformId 就是游戏里的海克斯 ID）+ 各语言 lol.stringtable.json。
   正式服（latest）和测试服（pbe）都取，正式服优先；测试服补上还没上线的新海克斯。
   stringtable 里新加的键是哈希：小写键名的 xxh3_64 取低 38 位，写成 {%010x}（要装 xxhash，只有这个脚本用）。
 - 英雄：Data Dragon 各语言 champion.json 的 name 和 title（按 key 即英雄数字 ID）。
 - 选英雄界面：rcp-fe-lol-champ-select 的 trans.json（预选栏左边的「可用」、开局选卡的「选择你的英雄」）。
-拳头的简中名字和腾讯的应当一致，不一致的条数会打印出来。
+不再下载/核对任何腾讯接口。
 """
 from __future__ import annotations
 
@@ -83,7 +83,6 @@ def ui_texts() -> dict[str, dict[str, str]]:
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="外服名字表")
     ap.add_argument("--out", type=Path, default=ROOT / "lolhex" / "data" / "i18n.json")
-    ap.add_argument("--tencent", type=Path, help="腾讯 kiwi_augments.json（核对简中名字；不给就在线取）")
     a = ap.parse_args(argv)
     if hasattr(sys.stdout, "reconfigure"):
         sys.stdout.reconfigure(encoding="utf-8", errors="replace")
@@ -93,14 +92,9 @@ def main(argv=None) -> int:
     ver, hero = heroes()
     ui = ui_texts()
 
-    tx = (json.loads(a.tencent.read_text(encoding="utf-8")) if a.tencent else
-          get_json("https://game.gtimg.cn/images/lol/act/img/js/kiwi/kiwi_augments.json"))
-    tx = {str(x["augmentID"]): x["name_cn"] for x in tx}
-    diff = [(i, tx[i], v["zh_CN"]) for i, v in aug.items() if i in tx and v.get("zh_CN") and v["zh_CN"] != tx[i]]
-    print(f"简中名字和腾讯一致 {sum(1 for i, v in aug.items() if tx.get(i) == v.get('zh_CN'))} 个，不一致 {len(diff)} 个", diff[:10])
     print("选英雄界面：", json.dumps(ui, ensure_ascii=False))
 
-    out = {"_说明": "外服名字表，scripts/update_i18n.py 生成。augments/heroes 按腾讯同一套 ID；heroes 每种语言是 [名字, 称号]。",
+    out = {"_说明": "外服名字表，scripts/update_i18n.py 生成。augments/heroes 用游戏同一套数字 ID；heroes 每种语言是 [名字, 称号]。",
            "ddragon": ver, "augments": dict(sorted(aug.items(), key=lambda kv: int(kv[0]))),
            "heroes": dict(sorted(hero.items(), key=lambda kv: int(kv[0]))), "ui": ui}
     a.out.write_text(json.dumps(out, ensure_ascii=False, indent=0, sort_keys=False) + "\n", encoding="utf-8")

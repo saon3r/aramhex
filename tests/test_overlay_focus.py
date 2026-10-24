@@ -139,10 +139,8 @@ def test_search_pick_and_escape_give_focus_back(panel):
 
 
 @pytest.mark.parametrize("w,h", [(1024, 576), (1280, 720), (1600, 900), (1920, 1080)])
-def test_lobby_badge_scales_with_client(panel, monkeypatch, w, h):
+def test_lobby_badge_scales_with_client(panel, w, h):
     # 1.1.1（A4）：大厅里图标放在头像右边「在线」那一行、铃铛左边，位置和大小按客户端窗口等比例
-    from lolhex import cloud
-    monkeypatch.setattr(cloud, "get", lambda: cloud._merge({}))
     r = panel.overlay.win.Rect(100, 50, w, h)
     s = h / 720
     cx, cy, d = panel.overlay.client_badge(r)
@@ -156,15 +154,13 @@ def test_lobby_badge_scales_with_client(panel, monkeypatch, w, h):
     assert b.width() == 40 and panel.p.y() == 50 + 90
 
 
-def test_lobby_badge_cloud_override_and_bad_values(panel, monkeypatch):
-    from lolhex import cloud
+def test_lobby_badge_uses_fixed_local_layout_constants(panel):
+    # 云控已移除：大厅图标位置用本地常量，和原云控默认值一致
+    from lolhex.ui import overlay
+    assert (overlay.CLIENT_BADGE_RIGHT, overlay.CLIENT_BADGE_TOP, overlay.CLIENT_BADGE_SIZE) == (60, 53, 26)
     r = panel.overlay.win.Rect(0, 0, 1280, 720)
-    monkeypatch.setattr(cloud, "get", lambda: cloud._merge({"ui": {"client_badge_right": 90, "client_badge_top": "70"}}))
-    assert panel.overlay.client_badge(r) == (1280 - 90, 70, 26)
-    monkeypatch.setattr(cloud, "get", lambda: cloud._merge({"ui": {"client_badge_right": 9999, "client_badge_size": "x"}}))
-    assert panel.overlay.client_badge(r) == (1280 - 60, 53, 26)   # 超出范围、认不出：用默认
+    assert panel.overlay.client_badge(r) == (1280 - 60, 53, 26)
     # 浮窗设在左上角：大厅里也按以前的位置
-    monkeypatch.setattr(cloud, "get", lambda: cloud._merge({}))
     panel.p.corner = "top-left"
     panel.p.place(r, in_client=True)
     assert panel.p.btn.width() == 40 and (panel.p.x(), panel.p.y()) == (12, 90)
@@ -215,10 +211,8 @@ def test_champ_select_layer_registers_labels(panel, monkeypatch):
         assert not (r.left <= 425 <= r.left + r.width and r.top <= 75 <= r.top + r.height)
 
 
-def test_toggle_keeps_icon_in_place(panel, monkeypatch):
+def test_toggle_keeps_icon_in_place(panel):
     # 点图标展开/收起：浮窗在右上角时图标不能跳（以前收起时先跳到详情左边，下次摆放才回来）
-    from lolhex import cloud
-    monkeypatch.setattr(cloud, "get", lambda: cloud._merge({}))
     p = panel.p
     p.place(panel.overlay.win.Rect(0, 0, 1920, 1080), in_client=True)
     icon = lambda: (p.x(), p.y(), p.width(), p.height())  # noqa: E731
@@ -240,9 +234,7 @@ def test_toggle_keeps_icon_in_place(panel, monkeypatch):
 
 def test_publish_registers_icon_and_body_only(panel, monkeypatch):
     # 复核 10-22：展开后只登记图标和详情，图标左边那条透明区域不涂（不然盖住预选栏最后一格头像）
-    from lolhex import cloud
     win = panel.overlay.win
-    monkeypatch.setattr(cloud, "get", lambda: cloud._merge({}))
     monkeypatch.setattr(win, "_drawn", {})
     p = panel.p
     p.place(win.Rect(0, 0, 1280, 720), in_client=True)

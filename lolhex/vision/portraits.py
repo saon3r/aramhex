@@ -1,10 +1,10 @@
 """选英雄界面的英雄头像识别：把截图里的头像小块和官方方形头像库比对。
 
-只读屏幕像素。头像库来自腾讯公开 CDN（game.gtimg.cn/.../champion/{alias}.png），
-随程序内置一份（data/hero_icons.json，scripts/update_hero_icons.py 生成），首次运行不用等下载；
-本地缓存里有的优先用缓存，内置里没有的新英雄照常下载到缓存。再加上随程序内置的拳头客户端头像（data/client_icons.json，
-scripts/update_client_icons.py 生成）：一些英雄拳头换了新头像、腾讯 CDN 还是旧的（萨科、阿狸等），
-预选栏显示的是新的，只比腾讯的认不出。每个英雄取两张里更像的那张。
+只读屏幕像素。运行时来源是 Data Dragon 的方形头像（ddragon.leagueoflegends.com/cdn/<版本>/
+img/champion/<alias>.png，ID→alias 由随程序的 static_fallback.json 钉住），下载到本地缓存。
+旧的腾讯内置头像（data/hero_icons.json）和拳头客户端头像（data/client_icons.json，
+scripts/update_client_icons.py 生成）仍保留作离线/下载失败兜底和回滚：
+客户端头像按英雄 ID 存，173 个都有，首次运行不联网也能覆盖全部英雄；每个英雄取两套里更像的那张。
 
 比对方法：取头像中间的圆形区域（避开边框、圆角和选中高亮），缩到 20×20，
 头像库按几种放大倍数各算一份（客户端头像裁得更紧），
@@ -140,15 +140,21 @@ class IconBank:
 
     @classmethod
     def from_dir(cls, folder: Path, heroes: dict[str, dict], extra: dict[str, np.ndarray] | None = None) -> "IconBank":
-        """folder 里是腾讯头像缓存（{alias}.png），缺的用内置的；extra 是拳头客户端头像（client_icons()），只取 heroes 里有的英雄。"""
+        """folder 里是下载缓存（{alias}.png，Data Dragon 运行时来源），缺的用旧内置兜底；
+        extra 是拳头客户端头像（client_icons()，按英雄 ID），只取 heroes 里有的英雄。"""
         icons: dict[str, list[np.ndarray]] = {}
         bundled = hero_icons()
+        bundled_lower = {alias.lower(): alias for alias in bundled}
         for hid, h in heroes.items():
             alias = h.get("alias")
             p = folder / f"{alias}.png"
             img = cv2.imdecode(np.fromfile(str(p), np.uint8), cv2.IMREAD_COLOR) if p.is_file() else None
-            if img is None and alias in bundled:  # 缓存没有（第一次运行、下载失败）：用内置的
-                img = cv2.imdecode(np.frombuffer(bundled[alias], np.uint8), cv2.IMREAD_COLOR)
+            if img is None and alias:
+                # 缓存没有（第一次运行、下载失败）：用旧内置的。腾讯有一部分 alias 大小写不同
+                # （Fiddlesticks/FiddleSticks），不能拿 Data Dragon 的拼写硬当文件名。
+                key = alias if alias in bundled else bundled_lower.get(alias.lower())
+                if key:
+                    img = cv2.imdecode(np.frombuffer(bundled[key], np.uint8), cv2.IMREAD_COLOR)
             if img is not None:
                 icons.setdefault(hid, []).append(img)
             if extra and hid in extra:
@@ -162,7 +168,7 @@ _hero_icons: dict[str, bytes] | None = None
 
 
 def hero_icons(path: Path = HERO_ICONS) -> dict[str, bytes]:
-    """内置的腾讯头像 {alias: PNG 原始字节}；文件没有或坏了就返回空（全靠下载）。读一次就记住。"""
+    """旧的腾讯内置头像 {alias: PNG 原始字节}，只作离线/下载失败兜底；文件没有或坏了返回空。读一次就记住。"""
     global _hero_icons
     if _hero_icons is not None and path == HERO_ICONS:
         return _hero_icons
@@ -196,22 +202,34 @@ def client_icons(path: Path = CLIENT_ICONS) -> dict[str, np.ndarray]:
         return {}
 
 
-def ensure_icons(folder: Path, heroes: dict[str, dict]) -> int:
-    """下载缺少的英雄头像（内置里已有的不下），返回新下载的数量。失败的下次再试。"""
+def ensure_icons(folder: Path, heroes: dict[str, dict], transport=None) -> int:
+    """下载缺少的英雄头像（Data Dragon 是运行时来源，旧内置只作兜底），返回新下载的数量。
+
+    缓存里已有非空文件就跳过；下载的字节必须能解码成图片，先写临时文件再原子替换，
+    失败/坏响应不落盘、不覆盖已有缓存，下次启动再试。"""
     from ..data import http
     folder.mkdir(parents=True, exist_ok=True)
-    bundled = hero_icons()
     n = 0
     for h in heroes.values():
         alias, url = h.get("alias"), h.get("icon")
-        if not alias or not url or alias in bundled:
+        if not alias or not url:
             continue
         p = folder / f"{alias}.png"
         if p.exists() and p.stat().st_size > 0:
             continue
+        tmp = p.with_suffix(".tmp")
         try:
-            p.write_bytes(http.get(url, timeout=15, retries=1).content)
+            body = http.fetch(url, timeout=15, transport=transport)
+            if not body or not body.startswith(b"\x89PNG") or cv2.imdecode(
+                    np.frombuffer(body, np.uint8), cv2.IMREAD_COLOR) is None:
+                raise ValueError("返回的不是可解码的 PNG")
+            tmp.write_bytes(body)
+            tmp.replace(p)
             n += 1
         except Exception as e:  # noqa: BLE001
-            log.warning("头像下载失败 %s：%s", alias, e)
+            try:
+                tmp.unlink()
+            except OSError:
+                pass
+            log.info("头像下载失败 %s：%s", alias, e)
     return n

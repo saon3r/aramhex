@@ -16,7 +16,7 @@ from ..config import app_home
 
 log = logging.getLogger(__name__)
 KEEP = 300                # 最多留这么多张，多了删最早的
-SETTLE_MS = {"三选一": 900, "选英雄": 300}  # 推荐和标注画出来以后再截
+SETTLE_MS = {"offer": 900, "champ-select": 300}  # 推荐和标注画出来以后再截
 CS_STABLE_S = 4.0         # 选英雄：标出来的英雄数这么久没再增加才截（队友陆续选好、识别完）
 
 
@@ -43,7 +43,7 @@ class AutoShot:
             key = tuple(offer.get("slots") or [])
             if key != self._offer_key and any(key):
                 self._offer_key = key
-                self._schedule(game_rect, "三选一")
+                self._schedule(game_rect, "offer")
         elif not offer:
             self._offer_key = None
         cs = snap.get("champ_select")
@@ -54,7 +54,7 @@ class AutoShot:
                 self._cs_seen = (n, now)
             elif n > self._cs_shot and now - self._cs_seen[1] >= CS_STABLE_S:
                 self._cs_shot = n  # 后面又多标出英雄时再截一张
-                self._schedule(client_rect, "选英雄")
+                self._schedule(client_rect, "champ-select")
         elif not cs:
             self._cs_shot, self._cs_seen = 0, (0, 0.0)
 
@@ -83,10 +83,10 @@ class AutoShot:
                         n += 1
                         path = shots_dir() / f"{stamp}-{n}-{kind}.png"
                     path.write_bytes(buf.tobytes())
-                    log.info("自动截图：%s", path.name)
+                    log.info("Auto screenshot saved: %s", path.name)
                     self._prune()
         except Exception:
-            log.exception("自动截图失败")
+            log.exception("Auto screenshot failed")
         finally:
             self._busy = False
 

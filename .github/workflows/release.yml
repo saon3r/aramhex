@@ -21,7 +21,7 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
         with:
-          python-version: "3.13.16"  # 和 1.0.0 一样；Python 一变 python313.dll 就变，老用户没法增量更新
+          python-version: "3.13.16"  # 和 1.0.0 一样，打包后的运行环境保持一致
           cache: pip
       - name: 安装依赖
         run: python -m pip install -r requirements-build.txt
@@ -49,31 +49,6 @@ jobs:
 
       - name: 打包
         run: pwsh -NoProfile -File packaging/build.ps1 -PythonExe python
-
-      - name: 增量更新文件（updates 分支）
-        run: |
-          # 先于 Release 推送：用户一看到新版本，增量更新的清单和文件就已经在了
-          $version = "${{ github.ref_name }}".TrimStart('v')
-          python -m lolhex.patch build/dist/AramHex $version build/updates
-          if ($LASTEXITCODE) { throw '生成增量更新文件失败' }
-          Push-Location build/updates
-          git init -q -b updates
-          git config user.name "github-actions[bot]"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-          git add -A
-          git commit -q -m "AramHex $version 增量更新文件"
-          # 分支给 1.0.3 用；tag 给 1.0.4 起的版本用（jsDelivr 按 tag 取是即时的，按分支取会缓存好几个小时）
-          git tag "updates-v$version"
-          git push -q --force "https://x-access-token:${{ github.token }}@github.com/${{ github.repository }}.git" updates:updates "updates-v$version"
-          if ($LASTEXITCODE) { throw '推送 updates 分支失败' }
-          Pop-Location
-          # jsDelivr 会把分支上的文件缓存最多 12 小时：推送后刷新清单和文件
-          $m = Get-Content -Raw -Encoding UTF8 build/updates/manifest.json | ConvertFrom-Json
-          $names = @('manifest.json') + ($m.patchable | ForEach-Object { "files/$_.gz"; "files/$_" })
-          foreach ($n in $names) {
-            try { Invoke-RestMethod -Uri "https://purge.jsdelivr.net/gh/${{ github.repository }}@updates/$n" -TimeoutSec 30 | Out-Null }
-            catch { Write-Warning "jsDelivr 刷新 $n 失败：$_" }
-          }
 
       - name: 发布说明
         run: python scripts/release_notes.py "${{ github.ref_name }}" > build/release-notes.md

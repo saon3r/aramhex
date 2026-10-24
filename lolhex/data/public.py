@@ -9,13 +9,15 @@
 两个来源，用样本更新的那份：
 - 安装包内置：lolhex/data/bundled/（发版时由 scripts/update_data.py 放进来）；
 - 下载的：<app_home>/data/public/（启动时查数据仓库的 latest.json，有新数据就下载，逐个文件校验 SHA-256）。
-  先试 GitHub，连不上或校验不过就换 jsDelivr 镜像（DATA_SOURCES）。
+  先试 aramhex.com 镜像，连不上或校验不过再用 raw.githubusercontent.com 兜底（DATA_SOURCES）。
 
-官方资料（英雄、海克斯字典、出装、加点）仍由父类 DataStore 直接从腾讯取。
+静态资料（英雄、海克斯字典、装备）仍由父类 DataStore 取；单英雄出装、加点、官方层级已移除，
+hero() 只返回自采统计口径的数据。
 """
 
 from __future__ import annotations
 
+import copy
 import hashlib
 import json
 import logging
@@ -24,13 +26,16 @@ import threading
 import time
 from pathlib import Path
 
-import requests
-
-from .. import DATA_REPO, MIRROR, cloud
-from . import http
-from .store import DataStore, _read
+from .. import DATA_REPO, MIRROR
+from . import http, metadata
+from .store import CHERRY_AUGMENTS, DataStore, _rarity, _read
 
 log = logging.getLogger(__name__)
+
+
+def headers() -> dict[str, str]:
+    """统计数据请求的匿名请求头：只有版本号，没有安装编号、Cookie 或账号信息。"""
+    return {"User-Agent": http.APP_UA}
 
 # 1.1.1 起只分三档（数据里 high、top 早就合成了「前 5%」，bands/top 和 bands/high 内容相同）
 BANDS = {"casual": "娱乐", "mid": "中分", "high": "前 5%"}
@@ -41,12 +46,8 @@ def norm_band(band):
     return BAND_ALIASES.get(band, band) if band else band
 BUNDLED_DIR = Path(__file__).with_name("bundled")
 RAW_BASE = f"https://raw.githubusercontent.com/{DATA_REPO}/main"
-# 先走官网镜像（DMIT 定时从 GitHub 同步），不通再试 GitHub 和 jsDelivr。每个文件都按清单校验 SHA-256。
-DATA_SOURCES = [f"{MIRROR}/data", RAW_BASE] + [f"https://{host}/gh/{DATA_REPO}@main"
-                             for host in ("fastly.jsdelivr.net", "gcore.jsdelivr.net", "cdn.jsdelivr.net")]
-# jsDelivr 按分支（@main）取会缓存好几个小时；数据每更新一次打 tag data-v<序号>，按"下一个序号"试探，按 tag 取是即时的
-DATA_TAG_HOSTS = ("fastly.jsdelivr.net", "gcore.jsdelivr.net")
-DATA_TAG_FMT = "https://{host}/gh/" + DATA_REPO + "@data-v{seq}"
+# 先走官网镜像（DMIT 定时从 GitHub 同步），不通再用 raw GitHub。每个文件都按清单校验 SHA-256。
+DATA_SOURCES = [f"{MIRROR}/data", RAW_BASE]
 SYNC_EVERY_S = 6 * 3600
 SCHEMA_VERSION = 1
 
@@ -86,7 +87,8 @@ class Dataset:
         manifest = _read(self.folder / "latest.json")
         if manifest is None:
             raise DatasetError(f"{folder} 没有 latest.json")
-        self.manifest = check_manifest(manifest)
+        # 清单是这份数据的身份：拷一份，调用方/下载流程后续改动不会悄悄改掉已加载数据集的校验依据。
+        self.manifest = check_manifest(copy.deepcopy(manifest))
         for name, f in self.manifest["files"].items():
             p = self.folder / name
             if not p.is_file() or _sha256(p) != f["sha256"]:
@@ -94,7 +96,7 @@ class Dataset:
         self.meta = _read(self.folder / "meta.json") or {}
         self.patch = str(self.manifest.get("patch") or self.meta.get("patch") or "")
         self.snapshot_at = str(self.manifest.get("snapshot_at") or "")
-        self.seq = int(self.manifest.get("seq") or 0)  # 数据更新序号，对应 tag data-v<seq>
+        self.seq = int(self.manifest.get("seq") or 0)  # 数据更新序号
         self.mode = str(self.manifest.get("mode") or "normal")       # normal / first-prismatic 等
         self.mode_label = str(self.manifest.get("mode_label") or "")
         # 数据版本号：整份清单（全部文件的 SHA-256 + 样本时间）的摘要，任何一个文件变了都会变
@@ -218,7 +220,8 @@ def unpack(blob: bytes) -> dict[str, bytes]:
     return out
 
 
-def download(base_url: str, manifest: dict, dest: Path, timeout: float = 30, progress=None) -> None:
+def download(base_url: str, manifest: dict, dest: Path, timeout: float = 30, progress=None, *,
+             transport=None) -> None:
     """按清单下载一份数据到 dest（先写到旁边的临时目录，全部校验通过才换上）。progress(已下载字节, 总字节)。
     先试官网镜像上的压缩包（约小一半），还原后按清单逐个核对 SHA-256；没有或不对就逐个文件下载。"""
     check_manifest(manifest)
@@ -237,8 +240,9 @@ def download(base_url: str, manifest: dict, dest: Path, timeout: float = 30, pro
             progress(done[0], total)
     files = None
     try:
-        files = unpack(http.fetch(f"{base_url}/{path}.pack.xz", timeout=timeout, headers=cloud.headers(base_url + "/"),
-                                  on_bytes=lambda n: progress and progress(0, 0)))
+        files = unpack(http.fetch(f"{base_url}/{path}.pack.xz", timeout=timeout, headers=headers(),
+                                  on_bytes=lambda n: progress and progress(0, 0),
+                                  transport=transport))
         log.info("统计数据用压缩包下载：%s", base_url)
     except Exception as e:
         log.debug("没有可用的压缩包（%s），逐个文件下载", e)
@@ -249,8 +253,8 @@ def download(base_url: str, manifest: dict, dest: Path, timeout: float = 30, pro
                 if files:
                     log.info("压缩包里的 %s 对不上，改为逐个文件下载", name)
                     files = None
-                body = http.fetch(f"{base_url}/{path}/{name}", timeout=timeout, headers=cloud.headers(base_url + "/"),
-                                  on_bytes=on_bytes)
+                body = http.fetch(f"{base_url}/{path}/{name}", timeout=timeout, headers=headers(),
+                                  on_bytes=on_bytes, transport=transport)
             if hashlib.sha256(body).hexdigest() != f["sha256"] or ("size" in f and len(body) != f["size"]):
                 raise DatasetError(f"{name} 校验不对（下载不完整或文件被改过）")
             out = tmp / name
@@ -272,34 +276,24 @@ def download(base_url: str, manifest: dict, dest: Path, timeout: float = 30, pro
 class PublicStore(DataStore):
     def __init__(self, root: Path, refresh_hours: float = 6.0, bundled: Path | None = None,
                  check_updates: bool = True, base_url: str | list[str] | None = None,
-                 tag_hosts=None, tag_fmt: str = DATA_TAG_FMT, event_source=None):
-        super().__init__(root, refresh_hours)
+                 transport=None):
+        super().__init__(root, refresh_hours, transport=transport)
         self.bundled = Path(bundled or BUNDLED_DIR)
         self.downloaded = self.root / "public"
-        self.event_dir = self.root / "public-event"  # 活动规则的数据（首次必棱彩等）
-        self.event: dict | None = None               # 正在进行的活动 {mode, label}（云控）
-        self.event_fallback = False                  # 有活动但还没有活动数据：先用常规
-        if event_source is None:
-            from .. import cloud
-            event_source = cloud.event if base_url is None else (lambda: None)
-        self._event_source = event_source
         self.check_updates = check_updates
         if base_url is None:
-            from .. import cloud
-            urls = [u.rstrip("/") for u in cloud.mirrors("data")] + DATA_SOURCES
+            urls = DATA_SOURCES
         else:
             urls = [base_url] if isinstance(base_url, str) else base_url
         self.base_urls = [u.rstrip("/") for u in urls]
-        # 默认地址时才按 tag 试探（测试里给了地址就不去连真的 jsDelivr）
-        self.tag_hosts = tuple(DATA_TAG_HOSTS if tag_hosts is None and base_url is None else (tag_hosts or ()))
-        self.tag_fmt = tag_fmt
         self.data_source: str | None = None  # 上次成功取到清单的地址
         self.band: str | None = None
         self.dataset: Dataset | None = None
+        self._dataset_seeded = False
         self.data_updated_at: float | None = None
         self.sync_error: str | None = None
         self.sync_progress: dict | None = None  # 下载统计数据时 {done, total}（字节）
-        self.sync_every_s = SYNC_EVERY_S  # 多久查一次数据仓库；引擎按云控 update.data_minutes 改
+        self.sync_every_s = SYNC_EVERY_S  # 多久查一次数据仓库；引擎用固定的本地间隔改
         self.hold = lambda: False  # 返回 True 时（正在对局）不在后台换数据，打完再换，一局里推荐前后一致
         self.data_note: dict | None = None   # 后台换了新数据：{id, text}，界面在游戏外提示一次
         self.data_offer: dict | None = None  # 关了自动更新、发现有新数据：{id, text}，界面在游戏外问一次
@@ -311,26 +305,124 @@ class PublicStore(DataStore):
     # ---------- 数据集 ----------
 
     def reload_dataset(self) -> bool:
-        """重新挑选数据；换了一份返回 True。有活动且有活动数据时用活动的，否则用常规的。"""
+        """重新挑选数据；换了一份返回 True。换数据后把已验证的静态表并进本地种子。"""
         ds = load_best([(self.downloaded, "downloaded"), (self.bundled, "bundled")])
-        self.event_fallback = False
-        if self.event:
-            ev = load_best([(self.event_dir, "downloaded")])
-            if ev is not None and ev.mode == self.event["mode"]:
-                ds = ev
-            else:
-                self.event_fallback = True
         with self._lock:
             changed = ds is not None and (self.dataset is None or ds.revision != self.dataset.revision)
             if changed or ds is None:
                 self.dataset = ds
                 self._views.clear()
             self._apply_ranks()
+        if ds is not None and (changed or not self._dataset_seeded):
+            self._seed_from_dataset(ds)
+            self._dataset_seeded = True
         return changed
+
+    @staticmethod
+    def _dataset_augment_ids(ds: "Dataset") -> set[str]:
+        """数据集里真正出现过的海克斯 ID；hero_augments 外层是英雄 ID，必须取内层键。"""
+        ids: set[str] = set()
+        _, hero_augs = ds.table(None)
+        for rows in (hero_augs.values() if isinstance(hero_augs, dict) else ()):
+            if isinstance(rows, dict):
+                ids.update(str(aid) for aid in rows)
+        ids |= {str(aid) for aid in ds.optional_table("augments.json")}
+        meta = ds.meta if isinstance(ds.meta, dict) else {}
+        for key in ("provisional_augments", "unobserved_augments"):
+            rows = meta.get(key)
+            if isinstance(rows, dict):
+                ids.update(str(aid) for aid in rows)
+        return ids
+
+    def _allowed_augment_ids(self) -> set[str]:
+        """Mayhem 白名单：已知本地 Mayhem 名字表 + 六张 Cherry 卡 + 数据集里验证过的 ID。
+
+        不从当前缓存里已有键反推：旧版本的 173 条英雄 ID 污染过缓存，不能自我证明合法。
+        """
+        ids = set(metadata.local_augment_ids()) | set(CHERRY_AUGMENTS)
+        if self.dataset is not None:
+            ids |= self._dataset_augment_ids(self.dataset)
+        return ids
+
+    def _seed_from_dataset(self, ds: "Dataset") -> None:
+        """校验通过的数据集里本来就带着英雄中文名、海克斯名字/稀有度和新卡标记：先并进静态表。
+
+        构造函数阶段调用，不发网络。只加白名单里真正有的 ID（Mayhem 统计/232 条字典/新卡），
+        不把英文源里 594 条竞技场记录整体放进来，也顺手清掉旧缓存里混进来的英雄 ID。
+        """
+        heroes, _ = ds.table(None)
+        meta = ds.meta if isinstance(ds.meta, dict) else {}
+        aug_meta = ds.optional_table("augments.json")
+        new_ids = set()
+        for key in ("provisional_augments", "unobserved_augments"):
+            rows = meta.get(key)
+            if isinstance(rows, dict):
+                new_ids.update(str(aid) for aid in rows)
+        allowed = self._allowed_augment_ids()
+        with self._lock:
+            cur_heroes = dict(self.heroes)
+            for hid, row in (heroes.items() if isinstance(heroes, dict) else ()):
+                if not isinstance(row, dict):
+                    continue
+                hid = str(hid)
+                base = dict(cur_heroes.get(hid) or {"id": hid})
+                if isinstance(row.get("name"), str) and row["name"].strip():
+                    base["name"] = row["name"].strip()
+                if isinstance(row.get("title"), str) and row["title"].strip():
+                    base["nick"] = row["title"].strip()
+                base.setdefault("name_en", metadata.hero_en(hid)[0])
+                base.setdefault("nick_en", metadata.hero_en(hid)[1])
+                base.setdefault("keywords", ",".join(
+                    t for t in (base.get("alias"), base.get("name_en"), base.get("nick_en")) if t))
+                cur_heroes[hid] = base
+
+            # 旧 schema 2 缓存可能把 173 个英雄 ID 当成海克斯；只保留白名单里的有效记录。
+            cur_augs = {aid: rec for aid, rec in self.augments.items() if aid in allowed}
+            for aid in allowed:
+                aid = str(aid)
+                row = aug_meta.get(aid) if isinstance(aug_meta, dict) else None
+                base = dict(cur_augs.get(aid) or {"id": aid})
+                if isinstance(row, dict) and isinstance(row.get("name"), str) and row["name"].strip():
+                    base["name"] = row["name"].strip()
+                if not base.get("name"):
+                    base["name"] = metadata.augment_zh(aid)
+                if not base.get("name_en"):
+                    base["name_en"] = metadata.augment_en(aid)
+                rarity = _rarity((row or {}).get("rarity")) if isinstance(row, dict) else None
+                if rarity:
+                    base["rarity"] = rarity
+                elif _rarity(base.get("rarity")) is None:
+                    base.pop("rarity", None)
+                base.setdefault("desc", "")
+                base.setdefault("icon", "")
+                modes = list(base.get("modes") or [])
+                if not any(str(m).startswith("KIWI") for m in modes):
+                    modes.append("KIWI")           # 数据集里出现的 ID 已证明是 Mayhem 卡
+                base["modes"] = modes
+                base["new"] = bool(base.get("new") or aid in new_ids)
+                cur_augs[aid] = base
+            families = self.static.get("families") or {}
+            patch = self.static.get("patch") if families.get("versions") else ds.patch
+            self.static = {**self.static, "heroes": cur_heroes, "augments": cur_augs,
+                           "patch": patch or self.static.get("patch", "")}
+        self._persist()
+
+    def _active_augment_ids(self) -> set[str]:
+        # 不回退到 super()：那里的 set(self.augments) 会把旧缓存污染当成合法来源。
+        return self._allowed_augment_ids()
+
+    def _new_augment_ids(self) -> set[str]:
+        ids = super()._new_augment_ids()
+        meta = self.dataset.meta if self.dataset and isinstance(self.dataset.meta, dict) else {}
+        for key in ("provisional_augments", "unobserved_augments"):
+            rows = meta.get(key)
+            if isinstance(rows, dict):
+                ids |= {str(aid) for aid in rows}
+        return ids
 
     def sync_data(self, force: bool = False, manual: bool = False) -> bool:
         """查数据仓库有没有更新的统计数据，有就下载并换上。下载了新数据返回 True。
-        manual=True：用户点了「检查更新」或同意了更新提示，关了自动更新、正在对局也查。
+        manual=True：用户同意了统计数据更新提示，关了自动更新、正在对局也查。
         后台查时：正在对局就先不查（打完再查）；关了自动更新只看有没有新的，有就记到 data_offer 等用户点头。"""
         if not manual and self.hold():
             log.debug("对局中，统计数据更新推迟到打完")
@@ -344,22 +436,8 @@ class PublicStore(DataStore):
             if not self.check_updates and not manual:
                 self._look_for_offer()
                 return False
-            event = self._event_source()
-            if event != self.event:
-                self.event = event
-                self.reload_dataset()
-            errors, tried_tags = [], False
+            errors = []
             for base in self.base_urls:  # 一个地址连不上、或下载的文件校验不过，就换下一个
-                if not tried_tags and self.tag_hosts and base != self.base_urls[0]:
-                    tried_tags = True  # GitHub 连不上了：先按 tag 试探 jsDelivr 上更新的数据
-                    tag_base = self._probe_tag()
-                    if tag_base:
-                        try:
-                            changed = self._sync_from(tag_base)
-                            self.data_source, self.sync_error = tag_base, None
-                            return changed
-                        except Exception as e:
-                            errors.append(f"{tag_base.split('/')[2]}（tag）：{e}")
                 try:
                     changed = self._sync_from(base)
                 except Exception as e:
@@ -367,11 +445,6 @@ class PublicStore(DataStore):
                     log.info("从 %s 检查统计数据更新失败：%s", base, e)
                     continue
                 self.data_source, self.sync_error = base, None
-                if self.event:
-                    try:
-                        changed = self._sync_event(base) or changed
-                    except Exception as e:
-                        log.info("活动数据下载失败：%s", e)
                 return changed
             # 都连不上很常见：用手头的数据，不打扰用户
             self.sync_error = "；".join(errors)[:300]
@@ -379,28 +452,11 @@ class PublicStore(DataStore):
         finally:
             self._sync_lock.release()
 
-    def _probe_tag(self, steps: int = 30) -> str | None:
-        """从当前数据的序号往后试 data-v<序号+1>、+2……，返回最新一份的地址；没有更新的返回 None。"""
-        seq = self.dataset.seq if self.dataset else 0
-        for host in self.tag_hosts:
-            best, k, answered = None, seq + 1, False
-            for _ in range(steps):
-                base = self.tag_fmt.format(host=host, seq=k)
-                try:
-                    r = requests.get(f"{base}/latest.json", headers=cloud.headers(base + "/"), timeout=15)
-                except requests.RequestException:
-                    break
-                answered = True
-                try:
-                    ok = r.status_code == 200 and int(r.json().get("seq") or 0) == k
-                except ValueError:
-                    ok = False
-                if not ok:
-                    break
-                best, k = base, k + 1
-            if answered:
-                return best  # 这个节点答复了（有或没有更新），不用再问别的节点
-        return None
+    def _read_manifest(self, base: str) -> dict:
+        """读一份数据仓库的 latest.json（清单只读，不下载）。"""
+        remote = http.get_json(f"{base}/latest.json", headers=headers(), timeout=15,
+                               transport=self.transport)
+        return check_manifest(remote)
 
     def _newer(self, remote: dict) -> bool:
         cur = self.dataset
@@ -422,9 +478,7 @@ class PublicStore(DataStore):
         """关了自动更新时：只读清单，看看有没有更新的数据（不下载）。连不上就算了，下次再看。"""
         for base in self.base_urls:
             try:
-                r = requests.get(f"{base}/latest.json", headers=cloud.headers(base + "/"), timeout=15)
-                r.raise_for_status()
-                remote = check_manifest(r.json())
+                remote = self._read_manifest(base)
             except Exception as e:
                 log.info("从 %s 查看统计数据失败：%s", base, e)
                 continue
@@ -435,15 +489,13 @@ class PublicStore(DataStore):
             return
 
     def _sync_from(self, base: str) -> bool:
-        r = requests.get(f"{base}/latest.json", headers=cloud.headers(base + "/"), timeout=15)
-        r.raise_for_status()
-        remote = check_manifest(r.json())
+        remote = self._read_manifest(base)
         if not self._newer(remote):
             return False
         log.info("统计数据有更新：%s（样本截至 %s），从 %s 下载", remote.get("patch"), remote.get("snapshot_at"), base)
         self.sync_progress = {"done": 0, "total": 0}  # 界面据此显示"统计数据更新中 x / y MB"
         try:
-            download(base, remote, self.downloaded,
+            download(base, remote, self.downloaded, transport=self.transport,
                      progress=lambda d, t: setattr(self, "sync_progress", {"done": d, "total": t}))
         finally:
             self.sync_progress = None
@@ -453,24 +505,6 @@ class PublicStore(DataStore):
             self.data_note = {"id": self.dataset.revision, "text": "数据已更新：" + self._describe(remote)}
             return True
         return False
-
-    def _sync_event(self, base: str) -> bool:
-        """活动期间：从数据仓库的 index.json 找同一规则最新的一份，下载到 public-event/。"""
-        r = requests.get(f"{base}/index.json", headers=cloud.headers(base + "/"), timeout=15)
-        r.raise_for_status()
-        idx = r.json()
-        cands = [dict(d, schema_version=d.get("schema_version", idx.get("schema_version")))
-                 for d in idx.get("datasets") or [] if d.get("mode") == self.event["mode"]]
-        if not cands:
-            return False
-        remote = max(cands, key=lambda d: (str(d.get("snapshot_at") or ""), str(d.get("patch") or "")))
-        cur = load_best([(self.event_dir, "downloaded")])
-        if cur and cur.mode == self.event["mode"] and \
-                (str(remote.get("snapshot_at") or ""), str(remote.get("patch") or "")) <= (cur.snapshot_at, cur.patch):
-            return False
-        log.info("下载活动数据：%s %s", self.event["label"], remote.get("patch"))
-        download(base, remote, self.event_dir)
-        return self.reload_dataset()
 
     def refresh(self, force: bool = False) -> None:
         super().refresh(force)
@@ -620,19 +654,18 @@ class PublicStore(DataStore):
         return {"source": cfg["source"], "items": rows} if rows else None
 
     def hero(self, hero_id: str, allow_network: bool = True) -> dict | None:
-        """官方出装、加点 + 海克斯列表（有统计的在前，带出场占比；官方层级一并保留）。"""
-        data = self.official_hero(hero_id, allow_network) or {}
-        stats = self.win_data(hero_id)
+        """统计口径的单英雄资料：只有有统计的海克斯，带稀有度和本英雄出场占比。
+        官方出装、加点、层级、原画已移除；没有统计返回 None。"""
+        stats = self.win_data(hero_id, band=None)  # 列出所有有统计的海克斯，不随当前分段缺行
         if not stats:
-            return data or None
-        official = {a["id"]: a for a in data.get("augments") or []}
+            return None
         augments = []
         for aid, a in stats["augments"].items():
-            t = official.pop(aid, {})
-            augments.append({**t, "id": aid, "rarity": t.get("rarity") or self.augments.get(aid, {}).get("rarity"),
-                             "pick": a["games"] / stats["sample_games"]})
-        augments += list(official.values())  # 统计里还没有的（新海克斯）：只有官方层级
-        return {**data, "augments": augments}
+            meta = self.augments.get(aid) or {}
+            augments.append({"id": aid, "rarity": meta.get("rarity"),
+                             "pick": a["games"] / stats["sample_games"] if stats["sample_games"] else None})
+        return {"source": "public", "label": stats["label"], "patch": stats["patch"],
+                "date": None, "augments": augments}
 
     def status(self) -> dict:
         s = super().status()
@@ -648,7 +681,6 @@ class PublicStore(DataStore):
                  band=self.band, band_effective=self.effective_band(),
                  dataset_mode=ds.mode if ds else None,
                  dataset_mode_label=(ds.mode_label or ds.mode) if ds and ds.mode != "normal" else None,
-                 event_label=(self.event or {}).get("label"), event_fallback=self.event_fallback,
                  data_updated_at=self.data_updated_at, sync_error=self.sync_error,
                  data_progress=self.sync_progress, data_note=self.data_note, data_offer=self.data_offer)
         return s

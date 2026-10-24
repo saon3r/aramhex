@@ -1,0 +1,195 @@
+{
+  "schema": 1,
+  "purpose": "Pinned public source icons proving DataDragon reference compatibility with actual bundled CDragon client icons for lolhex.vision.portraits.IconBank.",
+  "ddragon": {
+    "version": "16.21.1",
+    "host": "ddragon.leagueoflegends.com",
+    "url_template": "https://ddragon.leagueoflegends.com/cdn/16.21.1/img/champion/{alias}.png",
+    "fetched": "2026-10-24",
+    "fetch": "anonymous plain GET, no cookies, no redirects, exact HTTPS host check",
+    "license": "Riot Games game assets; personal, non-commercial use only"
+  },
+  "client": {
+    "bundled_file": "lolhex/data/client_icons.json",
+    "bundled_sha256": "12b682ead6343f07d78c5111509593f7b50164f3386e13e54bb62cc475135a7a",
+    "source": "https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/champion-icons",
+    "fetched": "2026-10-19",
+    "note": "client crops are decoded verbatim from the bundled CDragon PNG bytes, not regenerated art"
+  },
+  "thresholds_at_measurement": {
+    "MIN_SCORE": 0.75,
+    "MIN_MARGIN": 0.1
+  },
+  "sources": [
+    {
+      "hero_id": "17",
+      "alias": "Teemo",
+      "en_US": "Teemo",
+      "source_url": "https://ddragon.leagueoflegends.com/cdn/16.21.1/img/champion/Teemo.png",
+      "source_file": "source/Teemo.png",
+      "source_sha256": "bbf4b7238b1f62dc02b39208db764588d18a712a7ea96205f5932730c08a62ee",
+      "source_bytes": 21456,
+      "source_size": [
+        128,
+        128
+      ],
+      "client_file": "client/17_Teemo.png",
+      "client_file_sha256": "1f6a787be794b8469dc7e397c51524154a9c8e4448627c60e412e016e2d40bba",
+      "client_file_bytes": 9575,
+      "bundled_png_sha256": "52a8bcaf60b09e0b7a7bf10384d9431d1af6aec4cea110adc21b1d7e37bf32d0",
+      "bundled_png_bytes": 3014,
+      "client_size": [
+        64,
+        64
+      ],
+      "measured": {
+        "64": {
+          "hero_id": "17",
+          "score": 0.9944,
+          "second": 0.4101
+        },
+        "56": {
+          "hero_id": "17",
+          "score": 0.9904,
+          "second": 0.4053
+        }
+      }
+    },
+    {
+      "hero_id": "103",
+      "alias": "Ahri",
+      "en_US": "Ahri",
+      "source_url": "https://ddragon.leagueoflegends.com/cdn/16.21.1/img/champion/Ahri.png",
+      "source_file": "source/Ahri.png",
+      "source_sha256": "8e93368d97e3d302463c4e83ac5980d1f0a3a0aaf92ac44435730fecbd55b565",
+      "source_bytes": 28511,
+      "source_size": [
+        128,
+        128
+      ],
+      "client_file": "client/103_Ahri.png",
+      "client_file_sha256": "2f361e77d4145bc84b61ad9c8725718b9aac1e047535b33f23dcb21a2fa96857",
+      "client_file_bytes": 9802,
+      "bundled_png_sha256": "f9185dea45374ac883e2fe926071f6efcc10a377861357d4a9d31078f558c572",
+      "bundled_png_bytes": 2732,
+      "client_size": [
+        64,
+        64
+      ],
+      "measured": {
+        "64": {
+          "hero_id": "103",
+          "score": 0.991,
+          "second": 0.4438
+        },
+        "56": {
+          "hero_id": "103",
+          "score": 0.989,
+          "second": 0.4664
+        }
+      }
+    },
+    {
+      "hero_id": "35",
+      "alias": "Shaco",
+      "en_US": "Shaco",
+      "source_url": "https://ddragon.leagueoflegends.com/cdn/16.21.1/img/champion/Shaco.png",
+      "source_file": "source/Shaco.png",
+      "source_sha256": "83ad990c0196b9b33c06b6cdf672db2d1ab3025cde131961ba767ddfff9c7a8a",
+      "source_bytes": 28951,
+      "source_size": [
+        128,
+        128
+      ],
+      "client_file": "client/35_Shaco.png",
+      "client_file_sha256": "f4f341477d2ab67e92d54c75a75bc1d8766b5ada5b6a1caa8045b7f56a7defaf",
+      "client_file_bytes": 10266,
+      "bundled_png_sha256": "986e19f7431c511671341ac6bdc048ac927346195c19c0a2f80294846560468a",
+      "bundled_png_bytes": 2929,
+      "client_size": [
+        64,
+        64
+      ],
+      "measured": {
+        "64": {
+          "hero_id": "35",
+          "score": 0.9788,
+          "second": 0.3148
+        },
+        "56": {
+          "hero_id": "35",
+          "score": 0.9765,
+          "second": 0.3294
+        }
+      }
+    },
+    {
+      "hero_id": "77",
+      "alias": "Udyr",
+      "en_US": "Udyr",
+      "source_url": "https://ddragon.leagueoflegends.com/cdn/16.21.1/img/champion/Udyr.png",
+      "source_file": "source/Udyr.png",
+      "source_sha256": "5fa439ae56b9b7a7bdc2ee35661caf8080c19bf2ef5fc0b87ad0315271ac9b93",
+      "source_bytes": 29169,
+      "source_size": [
+        128,
+        128
+      ],
+      "client_file": "client/77_Udyr.png",
+      "client_file_sha256": "ee526dfb38d738debfdcab0d0969d49b4b3506ce394abccef1bf51affc1f424c",
+      "client_file_bytes": 9862,
+      "bundled_png_sha256": "befa6824ca5dfff44d3b0cb78c85c022d747a862793e4de095acc0871a00a312",
+      "bundled_png_bytes": 2772,
+      "client_size": [
+        64,
+        64
+      ],
+      "measured": {
+        "64": {
+          "hero_id": "77",
+          "score": 0.9877,
+          "second": 0.4903
+        },
+        "56": {
+          "hero_id": "77",
+          "score": 0.9825,
+          "second": 0.495
+        }
+      }
+    },
+    {
+      "hero_id": "120",
+      "alias": "Hecarim",
+      "en_US": "Hecarim",
+      "source_url": "https://ddragon.leagueoflegends.com/cdn/16.21.1/img/champion/Hecarim.png",
+      "source_file": "source/Hecarim.png",
+      "source_sha256": "ba5b2d3fd406fdd81e52e359231024ef4877009bdcf61c9d7ca389916fe61509",
+      "source_bytes": 28985,
+      "source_size": [
+        128,
+        128
+      ],
+      "client_file": "client/120_Hecarim.png",
+      "client_file_sha256": "724b8b3cb125dcbd23452ab2755d5e538c1019b06c873c9e4369e97c49eb56e2",
+      "client_file_bytes": 9912,
+      "bundled_png_sha256": "86192a9843b27de4350adf553418d20c2d9459196110c86d74ccaf135be43768",
+      "bundled_png_bytes": 2995,
+      "client_size": [
+        64,
+        64
+      ],
+      "measured": {
+        "64": {
+          "hero_id": "120",
+          "score": 0.9893,
+          "second": 0.2816
+        },
+        "56": {
+          "hero_id": "120",
+          "score": 0.9861,
+          "second": 0.2827
+        }
+      }
+    }
+  ]
+}

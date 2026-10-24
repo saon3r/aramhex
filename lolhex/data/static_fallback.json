@@ -1,0 +1,1682 @@
+{
+"_note": "Offline fallback for fresh/blocked installs: Data Dragon champion id->alias and CommunityDragon augment rarity, plus the small public summoner-spell id/name map used by the stats file. Runtime refresh replaces this with cached metadata; this file is not a stats manifest.",
+"schema": 1,
+"ddragon": "16.21.1",
+"fetched": "2026-10-24",
+"sources": {
+"ddragon_champion": {
+"url": "https://ddragon.leagueoflegends.com/cdn/16.21.1/data/en_US/champion.json",
+"sha256": "7798228cb92447d19270f5d106559ba4f7f47a6ae3c37c9bdf6c2eda226a3306"
+},
+"communitydragon_augments": {
+"url": "https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/cherry-augments.json",
+"sha256": "4f8967adfbf22933b0762396be2bd8483428062ee18f879f196e9100910ffc67"
+},
+"summoner_spells": "Riot public summoner spell IDs used by the stats dataset (1,4,6,7,13,14,21,32); names only, no Tencent assets"
+},
+"spells": {
+"1": "Cleanse",
+"4": "Flash",
+"6": "Ghost",
+"7": "Heal",
+"13": "Clarity",
+"14": "Ignite",
+"21": "Barrier",
+"32": "Mark"
+},
+"heroes": {
+"1": {
+"alias": "Annie",
+"name_en": "Annie",
+"title_en": "the Dark Child"
+},
+"2": {
+"alias": "Olaf",
+"name_en": "Olaf",
+"title_en": "the Berserker"
+},
+"3": {
+"alias": "Galio",
+"name_en": "Galio",
+"title_en": "the Colossus"
+},
+"4": {
+"alias": "TwistedFate",
+"name_en": "Twisted Fate",
+"title_en": "the Card Master"
+},
+"5": {
+"alias": "XinZhao",
+"name_en": "Xin Zhao",
+"title_en": "the Seneschal of Demacia"
+},
+"6": {
+"alias": "Urgot",
+"name_en": "Urgot",
+"title_en": "the Dreadnought"
+},
+"7": {
+"alias": "Leblanc",
+"name_en": "LeBlanc",
+"title_en": "the Deceiver"
+},
+"8": {
+"alias": "Vladimir",
+"name_en": "Vladimir",
+"title_en": "the Crimson Reaper"
+},
+"9": {
+"alias": "Fiddlesticks",
+"name_en": "Fiddlesticks",
+"title_en": "the Ancient Fear"
+},
+"10": {
+"alias": "Kayle",
+"name_en": "Kayle",
+"title_en": "the Righteous"
+},
+"11": {
+"alias": "MasterYi",
+"name_en": "Master Yi",
+"title_en": "the Wuju Bladesman"
+},
+"12": {
+"alias": "Alistar",
+"name_en": "Alistar",
+"title_en": "the Minotaur"
+},
+"13": {
+"alias": "Ryze",
+"name_en": "Ryze",
+"title_en": "the Rune Mage"
+},
+"14": {
+"alias": "Sion",
+"name_en": "Sion",
+"title_en": "The Undead Juggernaut"
+},
+"15": {
+"alias": "Sivir",
+"name_en": "Sivir",
+"title_en": "the Battle Mistress"
+},
+"16": {
+"alias": "Soraka",
+"name_en": "Soraka",
+"title_en": "the Starchild"
+},
+"17": {
+"alias": "Teemo",
+"name_en": "Teemo",
+"title_en": "the Swift Scout"
+},
+"18": {
+"alias": "Tristana",
+"name_en": "Tristana",
+"title_en": "the Yordle Gunner"
+},
+"19": {
+"alias": "Warwick",
+"name_en": "Warwick",
+"title_en": "the Uncaged Wrath of Zaun"
+},
+"20": {
+"alias": "Nunu",
+"name_en": "Nunu & Willump",
+"title_en": "the Boy and His Yeti"
+},
+"21": {
+"alias": "MissFortune",
+"name_en": "Miss Fortune",
+"title_en": "the Bounty Hunter"
+},
+"22": {
+"alias": "Ashe",
+"name_en": "Ashe",
+"title_en": "the Frost Archer"
+},
+"23": {
+"alias": "Tryndamere",
+"name_en": "Tryndamere",
+"title_en": "the Barbarian King"
+},
+"24": {
+"alias": "Jax",
+"name_en": "Jax",
+"title_en": "Grandmaster at Arms"
+},
+"25": {
+"alias": "Morgana",
+"name_en": "Morgana",
+"title_en": "the Fallen"
+},
+"26": {
+"alias": "Zilean",
+"name_en": "Zilean",
+"title_en": "the Chronokeeper"
+},
+"27": {
+"alias": "Singed",
+"name_en": "Singed",
+"title_en": "the Mad Chemist"
+},
+"28": {
+"alias": "Evelynn",
+"name_en": "Evelynn",
+"title_en": "Agony's Embrace"
+},
+"29": {
+"alias": "Twitch",
+"name_en": "Twitch",
+"title_en": "the Plague Rat"
+},
+"30": {
+"alias": "Karthus",
+"name_en": "Karthus",
+"title_en": "the Deathsinger"
+},
+"31": {
+"alias": "Chogath",
+"name_en": "Cho'Gath",
+"title_en": "the Terror of the Void"
+},
+"32": {
+"alias": "Amumu",
+"name_en": "Amumu",
+"title_en": "the Sad Mummy"
+},
+"33": {
+"alias": "Rammus",
+"name_en": "Rammus",
+"title_en": "the Armordillo"
+},
+"34": {
+"alias": "Anivia",
+"name_en": "Anivia",
+"title_en": "the Cryophoenix"
+},
+"35": {
+"alias": "Shaco",
+"name_en": "Shaco",
+"title_en": "the Demon Jester"
+},
+"36": {
+"alias": "DrMundo",
+"name_en": "Dr. Mundo",
+"title_en": "the Madman of Zaun"
+},
+"37": {
+"alias": "Sona",
+"name_en": "Sona",
+"title_en": "Maven of the Strings"
+},
+"38": {
+"alias": "Kassadin",
+"name_en": "Kassadin",
+"title_en": "the Void Walker"
+},
+"39": {
+"alias": "Irelia",
+"name_en": "Irelia",
+"title_en": "the Blade Dancer"
+},
+"40": {
+"alias": "Janna",
+"name_en": "Janna",
+"title_en": "the Storm's Fury"
+},
+"41": {
+"alias": "Gangplank",
+"name_en": "Gangplank",
+"title_en": "the Saltwater Scourge"
+},
+"42": {
+"alias": "Corki",
+"name_en": "Corki",
+"title_en": "the Daring Bombardier"
+},
+"43": {
+"alias": "Karma",
+"name_en": "Karma",
+"title_en": "the Enlightened One"
+},
+"44": {
+"alias": "Taric",
+"name_en": "Taric",
+"title_en": "the Shield of Valoran"
+},
+"45": {
+"alias": "Veigar",
+"name_en": "Veigar",
+"title_en": "the Tiny Master of Evil"
+},
+"48": {
+"alias": "Trundle",
+"name_en": "Trundle",
+"title_en": "the Troll King"
+},
+"50": {
+"alias": "Swain",
+"name_en": "Swain",
+"title_en": "the Noxian Grand General"
+},
+"51": {
+"alias": "Caitlyn",
+"name_en": "Caitlyn",
+"title_en": "the Sheriff of Piltover"
+},
+"53": {
+"alias": "Blitzcrank",
+"name_en": "Blitzcrank",
+"title_en": "the Great Steam Golem"
+},
+"54": {
+"alias": "Malphite",
+"name_en": "Malphite",
+"title_en": "Shard of the Monolith"
+},
+"55": {
+"alias": "Katarina",
+"name_en": "Katarina",
+"title_en": "the Sinister Blade"
+},
+"56": {
+"alias": "Nocturne",
+"name_en": "Nocturne",
+"title_en": "the Eternal Nightmare"
+},
+"57": {
+"alias": "Maokai",
+"name_en": "Maokai",
+"title_en": "the Twisted Treant"
+},
+"58": {
+"alias": "Renekton",
+"name_en": "Renekton",
+"title_en": "the Butcher of the Sands"
+},
+"59": {
+"alias": "JarvanIV",
+"name_en": "Jarvan IV",
+"title_en": "the Exemplar of Demacia"
+},
+"60": {
+"alias": "Elise",
+"name_en": "Elise",
+"title_en": "the Spider Queen"
+},
+"61": {
+"alias": "Orianna",
+"name_en": "Orianna",
+"title_en": "the Lady of Clockwork"
+},
+"62": {
+"alias": "MonkeyKing",
+"name_en": "Wukong",
+"title_en": "the Monkey King"
+},
+"63": {
+"alias": "Brand",
+"name_en": "Brand",
+"title_en": "the Burning Vengeance"
+},
+"64": {
+"alias": "LeeSin",
+"name_en": "Lee Sin",
+"title_en": "the Blind Monk"
+},
+"67": {
+"alias": "Vayne",
+"name_en": "Vayne",
+"title_en": "the Night Hunter"
+},
+"68": {
+"alias": "Rumble",
+"name_en": "Rumble",
+"title_en": "the Mechanized Menace"
+},
+"69": {
+"alias": "Cassiopeia",
+"name_en": "Cassiopeia",
+"title_en": "the Serpent's Embrace"
+},
+"72": {
+"alias": "Skarner",
+"name_en": "Skarner",
+"title_en": "the Primordial Sovereign"
+},
+"74": {
+"alias": "Heimerdinger",
+"name_en": "Heimerdinger",
+"title_en": "the Revered Inventor"
+},
+"75": {
+"alias": "Nasus",
+"name_en": "Nasus",
+"title_en": "the Curator of the Sands"
+},
+"76": {
+"alias": "Nidalee",
+"name_en": "Nidalee",
+"title_en": "the Bestial Huntress"
+},
+"77": {
+"alias": "Udyr",
+"name_en": "Udyr",
+"title_en": "the Spirit Walker"
+},
+"78": {
+"alias": "Poppy",
+"name_en": "Poppy",
+"title_en": "Keeper of the Hammer"
+},
+"79": {
+"alias": "Gragas",
+"name_en": "Gragas",
+"title_en": "the Rabble Rouser"
+},
+"80": {
+"alias": "Pantheon",
+"name_en": "Pantheon",
+"title_en": "the Unbreakable Spear"
+},
+"81": {
+"alias": "Ezreal",
+"name_en": "Ezreal",
+"title_en": "the Prodigal Explorer"
+},
+"82": {
+"alias": "Mordekaiser",
+"name_en": "Mordekaiser",
+"title_en": "the Iron Revenant"
+},
+"83": {
+"alias": "Yorick",
+"name_en": "Yorick",
+"title_en": "Shepherd of Souls"
+},
+"84": {
+"alias": "Akali",
+"name_en": "Akali",
+"title_en": "the Rogue Assassin"
+},
+"85": {
+"alias": "Kennen",
+"name_en": "Kennen",
+"title_en": "the Heart of the Tempest"
+},
+"86": {
+"alias": "Garen",
+"name_en": "Garen",
+"title_en": "The Might of Demacia"
+},
+"89": {
+"alias": "Leona",
+"name_en": "Leona",
+"title_en": "the Radiant Dawn"
+},
+"90": {
+"alias": "Malzahar",
+"name_en": "Malzahar",
+"title_en": "the Prophet of the Void"
+},
+"91": {
+"alias": "Talon",
+"name_en": "Talon",
+"title_en": "the Blade's Shadow"
+},
+"92": {
+"alias": "Riven",
+"name_en": "Riven",
+"title_en": "the Exile"
+},
+"96": {
+"alias": "KogMaw",
+"name_en": "Kog'Maw",
+"title_en": "the Mouth of the Abyss"
+},
+"98": {
+"alias": "Shen",
+"name_en": "Shen",
+"title_en": "the Eye of Twilight"
+},
+"99": {
+"alias": "Lux",
+"name_en": "Lux",
+"title_en": "the Lady of Luminosity"
+},
+"101": {
+"alias": "Xerath",
+"name_en": "Xerath",
+"title_en": "the Magus Ascendant"
+},
+"102": {
+"alias": "Shyvana",
+"name_en": "Shyvana",
+"title_en": "the Half-Dragon"
+},
+"103": {
+"alias": "Ahri",
+"name_en": "Ahri",
+"title_en": "the Nine-Tailed Fox"
+},
+"104": {
+"alias": "Graves",
+"name_en": "Graves",
+"title_en": "the Outlaw"
+},
+"105": {
+"alias": "Fizz",
+"name_en": "Fizz",
+"title_en": "the Tidal Trickster"
+},
+"106": {
+"alias": "Volibear",
+"name_en": "Volibear",
+"title_en": "the Relentless Storm"
+},
+"107": {
+"alias": "Rengar",
+"name_en": "Rengar",
+"title_en": "the Pridestalker"
+},
+"110": {
+"alias": "Varus",
+"name_en": "Varus",
+"title_en": "the Arrow of Retribution"
+},
+"111": {
+"alias": "Nautilus",
+"name_en": "Nautilus",
+"title_en": "the Titan of the Depths"
+},
+"112": {
+"alias": "Viktor",
+"name_en": "Viktor",
+"title_en": "the Herald of the Arcane"
+},
+"113": {
+"alias": "Sejuani",
+"name_en": "Sejuani",
+"title_en": "Fury of the North"
+},
+"114": {
+"alias": "Fiora",
+"name_en": "Fiora",
+"title_en": "the Grand Duelist"
+},
+"115": {
+"alias": "Ziggs",
+"name_en": "Ziggs",
+"title_en": "the Hexplosives Expert"
+},
+"117": {
+"alias": "Lulu",
+"name_en": "Lulu",
+"title_en": "the Fae Sorceress"
+},
+"119": {
+"alias": "Draven",
+"name_en": "Draven",
+"title_en": "the Glorious Executioner"
+},
+"120": {
+"alias": "Hecarim",
+"name_en": "Hecarim",
+"title_en": "the Shadow of War"
+},
+"121": {
+"alias": "Khazix",
+"name_en": "Kha'Zix",
+"title_en": "the Voidreaver"
+},
+"122": {
+"alias": "Darius",
+"name_en": "Darius",
+"title_en": "the Hand of Noxus"
+},
+"126": {
+"alias": "Jayce",
+"name_en": "Jayce",
+"title_en": "the Defender of Tomorrow"
+},
+"127": {
+"alias": "Lissandra",
+"name_en": "Lissandra",
+"title_en": "the Ice Witch"
+},
+"131": {
+"alias": "Diana",
+"name_en": "Diana",
+"title_en": "Scorn of the Moon"
+},
+"133": {
+"alias": "Quinn",
+"name_en": "Quinn",
+"title_en": "Demacia's Wings"
+},
+"134": {
+"alias": "Syndra",
+"name_en": "Syndra",
+"title_en": "the Dark Sovereign"
+},
+"136": {
+"alias": "AurelionSol",
+"name_en": "Aurelion Sol",
+"title_en": "The Star Forger"
+},
+"141": {
+"alias": "Kayn",
+"name_en": "Kayn",
+"title_en": "the Shadow Reaper"
+},
+"142": {
+"alias": "Zoe",
+"name_en": "Zoe",
+"title_en": "the Aspect of Twilight"
+},
+"143": {
+"alias": "Zyra",
+"name_en": "Zyra",
+"title_en": "Rise of the Thorns"
+},
+"145": {
+"alias": "Kaisa",
+"name_en": "Kai'Sa",
+"title_en": "Daughter of the Void"
+},
+"147": {
+"alias": "Seraphine",
+"name_en": "Seraphine",
+"title_en": "the Starry-Eyed Songstress"
+},
+"150": {
+"alias": "Gnar",
+"name_en": "Gnar",
+"title_en": "the Missing Link"
+},
+"154": {
+"alias": "Zac",
+"name_en": "Zac",
+"title_en": "the Secret Weapon"
+},
+"157": {
+"alias": "Yasuo",
+"name_en": "Yasuo",
+"title_en": "the Unforgiven"
+},
+"161": {
+"alias": "Velkoz",
+"name_en": "Vel'Koz",
+"title_en": "the Eye of the Void"
+},
+"163": {
+"alias": "Taliyah",
+"name_en": "Taliyah",
+"title_en": "the Stoneweaver"
+},
+"164": {
+"alias": "Camille",
+"name_en": "Camille",
+"title_en": "the Steel Shadow"
+},
+"166": {
+"alias": "Akshan",
+"name_en": "Akshan",
+"title_en": "the Rogue Sentinel"
+},
+"200": {
+"alias": "Belveth",
+"name_en": "Bel'Veth",
+"title_en": "the Empress of the Void"
+},
+"201": {
+"alias": "Braum",
+"name_en": "Braum",
+"title_en": "the Heart of the Freljord"
+},
+"202": {
+"alias": "Jhin",
+"name_en": "Jhin",
+"title_en": "the Virtuoso"
+},
+"203": {
+"alias": "Kindred",
+"name_en": "Kindred",
+"title_en": "The Eternal Hunters"
+},
+"221": {
+"alias": "Zeri",
+"name_en": "Zeri",
+"title_en": "The Spark of Zaun"
+},
+"222": {
+"alias": "Jinx",
+"name_en": "Jinx",
+"title_en": "the Loose Cannon"
+},
+"223": {
+"alias": "TahmKench",
+"name_en": "Tahm Kench",
+"title_en": "The River King"
+},
+"233": {
+"alias": "Briar",
+"name_en": "Briar",
+"title_en": "the Restrained Hunger"
+},
+"234": {
+"alias": "Viego",
+"name_en": "Viego",
+"title_en": "The Ruined King"
+},
+"235": {
+"alias": "Senna",
+"name_en": "Senna",
+"title_en": "the Redeemer"
+},
+"236": {
+"alias": "Lucian",
+"name_en": "Lucian",
+"title_en": "the Purifier"
+},
+"238": {
+"alias": "Zed",
+"name_en": "Zed",
+"title_en": "the Master of Shadows"
+},
+"240": {
+"alias": "Kled",
+"name_en": "Kled",
+"title_en": "the Cantankerous Cavalier"
+},
+"245": {
+"alias": "Ekko",
+"name_en": "Ekko",
+"title_en": "the Boy Who Shattered Time"
+},
+"246": {
+"alias": "Qiyana",
+"name_en": "Qiyana",
+"title_en": "Empress of the Elements"
+},
+"254": {
+"alias": "Vi",
+"name_en": "Vi",
+"title_en": "the Piltover Enforcer"
+},
+"266": {
+"alias": "Aatrox",
+"name_en": "Aatrox",
+"title_en": "the Darkin Blade"
+},
+"267": {
+"alias": "Nami",
+"name_en": "Nami",
+"title_en": "the Tidecaller"
+},
+"268": {
+"alias": "Azir",
+"name_en": "Azir",
+"title_en": "the Emperor of the Sands"
+},
+"350": {
+"alias": "Yuumi",
+"name_en": "Yuumi",
+"title_en": "the Magical Cat"
+},
+"360": {
+"alias": "Samira",
+"name_en": "Samira",
+"title_en": "the Desert Rose"
+},
+"412": {
+"alias": "Thresh",
+"name_en": "Thresh",
+"title_en": "the Chain Warden"
+},
+"420": {
+"alias": "Illaoi",
+"name_en": "Illaoi",
+"title_en": "the Kraken Priestess"
+},
+"421": {
+"alias": "RekSai",
+"name_en": "Rek'Sai",
+"title_en": "the Void Burrower"
+},
+"427": {
+"alias": "Ivern",
+"name_en": "Ivern",
+"title_en": "the Green Father"
+},
+"429": {
+"alias": "Kalista",
+"name_en": "Kalista",
+"title_en": "the Spear of Vengeance"
+},
+"432": {
+"alias": "Bard",
+"name_en": "Bard",
+"title_en": "the Wandering Caretaker"
+},
+"497": {
+"alias": "Rakan",
+"name_en": "Rakan",
+"title_en": "The Charmer"
+},
+"498": {
+"alias": "Xayah",
+"name_en": "Xayah",
+"title_en": "the Rebel"
+},
+"516": {
+"alias": "Ornn",
+"name_en": "Ornn",
+"title_en": "The Fire below the Mountain"
+},
+"517": {
+"alias": "Sylas",
+"name_en": "Sylas",
+"title_en": "the Unshackled"
+},
+"518": {
+"alias": "Neeko",
+"name_en": "Neeko",
+"title_en": "the Curious Chameleon"
+},
+"523": {
+"alias": "Aphelios",
+"name_en": "Aphelios",
+"title_en": "the Weapon of the Faithful"
+},
+"526": {
+"alias": "Rell",
+"name_en": "Rell",
+"title_en": "the Iron Maiden"
+},
+"555": {
+"alias": "Pyke",
+"name_en": "Pyke",
+"title_en": "the Bloodharbor Ripper"
+},
+"711": {
+"alias": "Vex",
+"name_en": "Vex",
+"title_en": "the Gloomist"
+},
+"777": {
+"alias": "Yone",
+"name_en": "Yone",
+"title_en": "the Unforgotten"
+},
+"799": {
+"alias": "Ambessa",
+"name_en": "Ambessa",
+"title_en": "Matriarch of War"
+},
+"800": {
+"alias": "Mel",
+"name_en": "Mel",
+"title_en": "the Soul's Reflection"
+},
+"804": {
+"alias": "Yunara",
+"name_en": "Yunara",
+"title_en": "the Unbroken Faith"
+},
+"805": {
+"alias": "Locke",
+"name_en": "Locke",
+"title_en": "the Ashen Exorcist"
+},
+"875": {
+"alias": "Sett",
+"name_en": "Sett",
+"title_en": "the Boss"
+},
+"876": {
+"alias": "Lillia",
+"name_en": "Lillia",
+"title_en": "the Bashful Bloom"
+},
+"887": {
+"alias": "Gwen",
+"name_en": "Gwen",
+"title_en": "The Hallowed Seamstress"
+},
+"888": {
+"alias": "Renata",
+"name_en": "Renata Glasc",
+"title_en": "the Chem-Baroness"
+},
+"893": {
+"alias": "Aurora",
+"name_en": "Aurora",
+"title_en": "the Witch Between Worlds"
+},
+"895": {
+"alias": "Nilah",
+"name_en": "Nilah",
+"title_en": "the Joy Unbound"
+},
+"897": {
+"alias": "KSante",
+"name_en": "K'Sante",
+"title_en": "the Pride of Nazumah"
+},
+"901": {
+"alias": "Smolder",
+"name_en": "Smolder",
+"title_en": "the Fiery Fledgling"
+},
+"902": {
+"alias": "Milio",
+"name_en": "Milio",
+"title_en": "The Gentle Flame"
+},
+"904": {
+"alias": "Zaahen",
+"name_en": "Zaahen",
+"title_en": "The Unsundered"
+},
+"910": {
+"alias": "Hwei",
+"name_en": "Hwei",
+"title_en": "the Visionary"
+},
+"950": {
+"alias": "Naafiri",
+"name_en": "Naafiri",
+"title_en": "the Hound of a Hundred Bites"
+}
+},
+"augments": {
+"1001": {
+"rarity": "prismatic"
+},
+"1002": {
+"rarity": "gold"
+},
+"1004": {
+"rarity": "prismatic"
+},
+"1005": {
+"rarity": "gold"
+},
+"1006": {
+"rarity": "prismatic"
+},
+"1007": {
+"rarity": "silver"
+},
+"1011": {
+"rarity": "prismatic"
+},
+"1013": {
+"rarity": "gold"
+},
+"1015": {
+"rarity": "prismatic"
+},
+"1018": {
+"rarity": "prismatic"
+},
+"1019": {
+"rarity": "prismatic"
+},
+"1020": {
+"rarity": "gold"
+},
+"1022": {
+"rarity": "silver"
+},
+"1025": {
+"rarity": "silver"
+},
+"1026": {
+"rarity": "silver"
+},
+"1027": {
+"rarity": "prismatic"
+},
+"1028": {
+"rarity": "silver"
+},
+"1029": {
+"rarity": "gold"
+},
+"1030": {
+"rarity": "prismatic"
+},
+"1034": {
+"rarity": "silver"
+},
+"1036": {
+"rarity": "gold"
+},
+"1037": {
+"rarity": "silver"
+},
+"1038": {
+"rarity": "gold"
+},
+"1041": {
+"rarity": "prismatic"
+},
+"1044": {
+"rarity": "silver"
+},
+"1045": {
+"rarity": "prismatic"
+},
+"1046": {
+"rarity": "silver"
+},
+"1047": {
+"rarity": "gold"
+},
+"1048": {
+"rarity": "prismatic"
+},
+"1051": {
+"rarity": "silver"
+},
+"1053": {
+"rarity": "prismatic"
+},
+"1054": {
+"rarity": "prismatic"
+},
+"1056": {
+"rarity": "silver"
+},
+"1057": {
+"rarity": "silver"
+},
+"1058": {
+"rarity": "prismatic"
+},
+"1060": {
+"rarity": "silver"
+},
+"1061": {
+"rarity": "gold"
+},
+"1062": {
+"rarity": "prismatic"
+},
+"1063": {
+"rarity": "gold"
+},
+"1064": {
+"rarity": "gold"
+},
+"1066": {
+"rarity": "prismatic"
+},
+"1067": {
+"rarity": "gold"
+},
+"1068": {
+"rarity": "gold"
+},
+"1071": {
+"rarity": "gold"
+},
+"1072": {
+"rarity": "gold"
+},
+"1073": {
+"rarity": "silver"
+},
+"1074": {
+"rarity": "gold"
+},
+"1076": {
+"rarity": "silver"
+},
+"1077": {
+"rarity": "gold"
+},
+"1079": {
+"rarity": "prismatic"
+},
+"1080": {
+"rarity": "silver"
+},
+"1081": {
+"rarity": "prismatic"
+},
+"1084": {
+"rarity": "gold"
+},
+"1087": {
+"rarity": "silver"
+},
+"1088": {
+"rarity": "prismatic"
+},
+"1092": {
+"rarity": "gold"
+},
+"1095": {
+"rarity": "prismatic"
+},
+"1097": {
+"rarity": "silver"
+},
+"1098": {
+"rarity": "gold"
+},
+"1103": {
+"rarity": "gold"
+},
+"1104": {
+"rarity": "gold"
+},
+"1105": {
+"rarity": "silver"
+},
+"1112": {
+"rarity": "silver"
+},
+"1113": {
+"rarity": "gold"
+},
+"1115": {
+"rarity": "prismatic"
+},
+"1116": {
+"rarity": "gold"
+},
+"1118": {
+"rarity": "gold"
+},
+"1129": {
+"rarity": "gold"
+},
+"1133": {
+"rarity": "gold"
+},
+"1134": {
+"rarity": "prismatic"
+},
+"1136": {
+"rarity": "silver"
+},
+"1138": {
+"rarity": "silver"
+},
+"1141": {
+"rarity": "gold"
+},
+"1149": {
+"rarity": "gold"
+},
+"1150": {
+"rarity": "gold"
+},
+"1151": {
+"rarity": "gold"
+},
+"1152": {
+"rarity": "gold"
+},
+"1154": {
+"rarity": "prismatic"
+},
+"1156": {
+"rarity": "prismatic"
+},
+"1170": {
+"rarity": "silver"
+},
+"1180": {
+"rarity": "gold"
+},
+"1181": {
+"rarity": "silver"
+},
+"1187": {
+"rarity": "silver"
+},
+"1194": {
+"rarity": "prismatic"
+},
+"1195": {
+"rarity": "prismatic"
+},
+"1204": {
+"rarity": "silver"
+},
+"1205": {
+"rarity": "silver"
+},
+"1206": {
+"rarity": "silver"
+},
+"1211": {
+"rarity": "gold"
+},
+"1214": {
+"rarity": "silver"
+},
+"1220": {
+"rarity": "prismatic"
+},
+"1225": {
+"rarity": "prismatic"
+},
+"1237": {
+"rarity": "silver"
+},
+"1238": {
+"rarity": "gold"
+},
+"1243": {
+"rarity": "prismatic"
+},
+"1301": {
+"rarity": "gold"
+},
+"1305": {
+"rarity": "silver"
+},
+"1308": {
+"rarity": "silver"
+},
+"1310": {
+"rarity": "prismatic"
+},
+"1311": {
+"rarity": "gold"
+},
+"1314": {
+"rarity": "silver"
+},
+"1315": {
+"rarity": "silver"
+},
+"1318": {
+"rarity": "silver"
+},
+"1319": {
+"rarity": "silver"
+},
+"1320": {
+"rarity": "silver"
+},
+"1322": {
+"rarity": "gold"
+},
+"1323": {
+"rarity": "prismatic"
+},
+"1324": {
+"rarity": "prismatic"
+},
+"1325": {
+"rarity": "prismatic"
+},
+"1326": {
+"rarity": "gold"
+},
+"1327": {
+"rarity": "silver"
+},
+"1328": {
+"rarity": "gold"
+},
+"1329": {
+"rarity": "prismatic"
+},
+"1331": {
+"rarity": "prismatic"
+},
+"1332": {
+"rarity": "prismatic"
+},
+"1333": {
+"rarity": "silver"
+},
+"1334": {
+"rarity": "gold"
+},
+"1335": {
+"rarity": "prismatic"
+},
+"1336": {
+"rarity": "gold"
+},
+"1337": {
+"rarity": "prismatic"
+},
+"1343": {
+"rarity": "prismatic"
+},
+"1344": {
+"rarity": "prismatic"
+},
+"1345": {
+"rarity": "gold"
+},
+"1346": {
+"rarity": "gold"
+},
+"1347": {
+"rarity": "silver"
+},
+"1348": {
+"rarity": "silver"
+},
+"1349": {
+"rarity": "prismatic"
+},
+"1353": {
+"rarity": "gold"
+},
+"1356": {
+"rarity": "gold"
+},
+"1358": {
+"rarity": "gold"
+},
+"1361": {
+"rarity": "prismatic"
+},
+"1373": {
+"rarity": "gold"
+},
+"1375": {
+"rarity": "gold"
+},
+"1379": {
+"rarity": "prismatic"
+},
+"1384": {
+"rarity": "gold"
+},
+"1386": {
+"rarity": "silver"
+},
+"1388": {
+"rarity": "prismatic"
+},
+"1389": {
+"rarity": "prismatic"
+},
+"1390": {
+"rarity": "gold"
+},
+"1392": {
+"rarity": "prismatic"
+},
+"1401": {
+"rarity": "gold"
+},
+"1402": {
+"rarity": "prismatic"
+},
+"1403": {
+"rarity": "gold"
+},
+"1404": {
+"rarity": "silver"
+},
+"1413": {
+"rarity": "prismatic"
+},
+"1415": {
+"rarity": "silver"
+},
+"1416": {
+"rarity": "silver"
+},
+"1420": {
+"rarity": "gold"
+},
+"1421": {
+"rarity": "prismatic"
+},
+"1996": {
+"rarity": "gold"
+},
+"2004": {
+"rarity": "prismatic"
+},
+"2005": {
+"rarity": "prismatic"
+},
+"2006": {
+"rarity": "prismatic"
+},
+"2007": {
+"rarity": "prismatic"
+},
+"2009": {
+"rarity": "silver"
+},
+"2010": {
+"rarity": "prismatic"
+},
+"2016": {
+"rarity": "silver"
+},
+"2018": {
+"rarity": "silver"
+},
+"2024": {
+"rarity": "silver"
+},
+"2026": {
+"rarity": "silver"
+},
+"2031": {
+"rarity": "prismatic"
+},
+"2032": {
+"rarity": "gold"
+},
+"2034": {
+"rarity": "gold"
+},
+"2042": {
+"rarity": "gold"
+},
+"2043": {
+"rarity": "gold"
+},
+"2046": {
+"rarity": "prismatic"
+},
+"2054": {
+"rarity": "prismatic"
+},
+"2055": {
+"rarity": "prismatic"
+},
+"2062": {
+"rarity": "prismatic"
+},
+"2063": {
+"rarity": "prismatic"
+},
+"2064": {
+"rarity": "gold"
+},
+"2065": {
+"rarity": "gold"
+},
+"2072": {
+"rarity": "prismatic"
+},
+"2073": {
+"rarity": "silver"
+},
+"2076": {
+"rarity": "silver"
+},
+"2077": {
+"rarity": "gold"
+},
+"2078": {
+"rarity": "gold"
+},
+"2080": {
+"rarity": "gold"
+},
+"2082": {
+"rarity": "gold"
+},
+"2083": {
+"rarity": "gold"
+},
+"2087": {
+"rarity": "prismatic"
+},
+"2088": {
+"rarity": "silver"
+},
+"2089": {
+"rarity": "gold"
+},
+"2091": {
+"rarity": "gold"
+},
+"2095": {
+"rarity": "prismatic"
+},
+"2096": {
+"rarity": "gold"
+},
+"2097": {
+"rarity": "gold"
+},
+"2098": {
+"rarity": "prismatic"
+},
+"2099": {
+"rarity": "prismatic"
+},
+"2100": {
+"rarity": "gold"
+},
+"2102": {
+"rarity": "gold"
+},
+"2103": {
+"rarity": "gold"
+},
+"2104": {
+"rarity": "prismatic"
+},
+"2107": {
+"rarity": "prismatic"
+},
+"2108": {
+"rarity": "silver"
+},
+"2109": {
+"rarity": "gold"
+},
+"2111": {
+"rarity": "gold"
+},
+"2115": {
+"rarity": "prismatic"
+},
+"2116": {
+"rarity": "gold"
+},
+"2118": {
+"rarity": "prismatic"
+},
+"2119": {
+"rarity": "gold"
+},
+"2123": {
+"rarity": "prismatic"
+},
+"2125": {
+"rarity": "silver"
+},
+"2126": {
+"rarity": "gold"
+},
+"2127": {
+"rarity": "silver"
+},
+"2128": {
+"rarity": "gold"
+},
+"2129": {
+"rarity": "gold"
+},
+"2131": {
+"rarity": "silver"
+},
+"2132": {
+"rarity": "gold"
+},
+"2133": {
+"rarity": "gold"
+},
+"2134": {
+"rarity": "prismatic"
+},
+"2135": {
+"rarity": "prismatic"
+},
+"2136": {
+"rarity": "silver"
+},
+"2137": {
+"rarity": "gold"
+},
+"2138": {
+"rarity": "silver"
+},
+"2139": {
+"rarity": "gold"
+},
+"2140": {
+"rarity": "gold"
+},
+"2141": {
+"rarity": "prismatic"
+},
+"2143": {
+"rarity": "gold"
+},
+"2144": {
+"rarity": "silver"
+},
+"2148": {
+"rarity": "silver"
+},
+"2157": {
+"rarity": "silver"
+},
+"3004": {
+"rarity": "gold"
+},
+"3016": {
+"rarity": "prismatic"
+},
+"3018": {
+"rarity": "prismatic"
+},
+"3025": {
+"rarity": "silver"
+},
+"3036": {
+"rarity": "gold"
+},
+"3039": {
+"rarity": "gold"
+},
+"3048": {
+"rarity": "prismatic"
+},
+"3049": {
+"rarity": "gold"
+},
+"3051": {
+"rarity": "silver"
+},
+"3052": {
+"rarity": "silver"
+},
+"3053": {
+"rarity": "prismatic"
+},
+"3055": {
+"rarity": "silver"
+},
+"3058": {
+"rarity": "gold"
+},
+"3059": {
+"rarity": "silver"
+},
+"3063": {
+"rarity": "silver"
+},
+"3071": {
+"rarity": "gold"
+},
+"3075": {
+"rarity": "gold"
+},
+"3078": {
+"rarity": "gold"
+},
+"3079": {
+"rarity": "prismatic"
+},
+"3081": {
+"rarity": "gold"
+},
+"3085": {
+"rarity": "silver"
+},
+"3086": {
+"rarity": "gold"
+},
+"3088": {
+"rarity": "gold"
+},
+"3094": {
+"rarity": "silver"
+},
+"3116": {
+"rarity": "gold"
+},
+"3118": {
+"rarity": "gold"
+},
+"3121": {
+"rarity": "silver"
+},
+"3123": {
+"rarity": "gold"
+},
+"3129": {
+"rarity": "gold"
+},
+"3131": {
+"rarity": "gold"
+},
+"3132": {
+"rarity": "gold"
+},
+"3134": {
+"rarity": "silver"
+},
+"3149": {
+"rarity": "prismatic"
+},
+"3150": {
+"rarity": "gold"
+},
+"3163": {
+"rarity": "gold"
+},
+"3170": {
+"rarity": "gold"
+},
+"3171": {
+"rarity": "gold"
+},
+"3172": {
+"rarity": "gold"
+},
+"3173": {
+"rarity": "gold"
+},
+"12317": {
+"rarity": "prismatic"
+}
+}
+}

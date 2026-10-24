@@ -17,7 +17,7 @@ import threading
 import time
 from pathlib import Path
 
-from . import cloud, i18n, recommend
+from . import i18n, recommend
 from .config import Settings, app_home
 from .data.public import PublicStore
 from .data.store import DataStore
@@ -60,6 +60,10 @@ def pick_my_hero(found: list[tuple[str, float, int]]) -> tuple[str | None, list[
 
 # 国服胜率排名 → 评级：前 10% S，30% A，60% B，85% C，其余 D
 GRADES = ((0.10, "S"), (0.30, "A"), (0.60, "B"), (0.85, "C"), (1.01, "D"))
+# 统计数据刷新间隔：原来云控 update.data_minutes 的默认值 360 分钟，现在固定成本地常量，不再读远程配置。
+DATA_SYNC_SECONDS = 6 * 3600
+# 错开一点，避免每次都在同一秒发请求（原来的云控默认值也是这样用的）。
+DATA_SYNC_JITTER = 0.1
 
 
 def rank_grade(rank, total) -> str | None:
@@ -70,14 +74,17 @@ def rank_grade(rank, total) -> str | None:
 
 
 class Engine:
-    def __init__(self, settings: Settings, home: Path | None = None, store: DataStore | None = None):
+    def __init__(self, settings: Settings, home: Path | None = None, store: DataStore | None = None,
+                 transport=None):
         self.settings = settings
         self.home = home or app_home()
+        self.transport = transport
         if store is not None:
             self.store = store
         else:
             self.store = PublicStore(self.home / "data", settings.refresh_hours,
-                                     check_updates=settings.check_data_updates)
+                                     check_updates=settings.check_data_updates,
+                                     transport=transport)
         if hasattr(self.store, "set_band"):
             self.store.set_band(settings.data_band or None)
         self._apply_rec_model()
@@ -90,7 +97,7 @@ class Engine:
         self._detector = None  # 延迟创建，避免没进游戏就加载 OCR 模型
         self._icon_bank = None  # 英雄头像库，头像下载好后创建
         from .data.icons import IconCache
-        self.icons = IconCache(self.home / "data" / "img")  # 装备、召唤师技能小图标
+        self.icons = IconCache(self.home / "data" / "img", transport=transport)  # 装备、召唤师技能小图标
         self._cs_memo = None    # 选人界面各位置的识别结果缓存（champselect.Memo）
         self._manual_hero = False
         self._cs_last_seen = 0.0  # 上次在选英雄界面里的时刻（time.monotonic）
@@ -137,25 +144,16 @@ class Engine:
         hid = self.store.resolve_hero(hero_key) if hero_key else None
         self._manual_hero = hid is not None
         self._set(hero_id=hid, hero_source="manual" if hid else None, hero_candidates=[])
-        if hid:
-            threading.Thread(target=self._prefetch_hero, args=(hid,), daemon=True).start()
         self._reevaluate()
 
-    def set_band(self, band: str | None, by_user: bool = True) -> None:
-        """切换参考分数段（None/"" = 全体），记住选择，并按新数据重算面板和三选一推荐。
-        by_user=False：云控改的，不算玩家自己选的。"""
-        if by_user:
-            self.settings.set_by_user("data_band", band or "")  # 云控正在强制时只记下玩家要的值
-        else:
-            self.settings.data_band = band or ""
+    def set_band(self, band: str | None) -> None:
+        """切换参考分数段（None/"" = 全体），记住选择，并按新数据重算面板和三选一推荐。"""
+        self.settings.set_by_user("data_band", band or "")
         band = self.settings.data_band or None
         self.settings.save()
         if hasattr(self.store, "set_band"):
             self.store.set_band(band or None)
         self._panel_cache = (None, None)
-        hid = self.state.get("hero_id")
-        if hid:
-            threading.Thread(target=self._prefetch_hero, args=(hid,), daemon=True).start()
         self._reevaluate()
 
     def correct_slot(self, index: int, augment_id: str | None) -> None:
@@ -185,12 +183,11 @@ class Engine:
         log.info("游戏语言：%s", self.settings.game_lang)
 
     def _apply_rec_model(self) -> None:
-        from . import langpack
         from .vision.ocr import OCR
-        path = langpack.installed() if self.settings.game_lang == "ko_KR" else None
-        if self.settings.game_lang == "ko_KR" and not path:
-            log.warning("选了韩服，但韩服识别数据还没下载，先用内置模型（认不出韩文）")
-        OCR.use_rec_model(path)
+        # 韩服识别模型下载（langpack）已移除：始终使用内置 RapidOCR 模型，不改识别启发式。
+        if self.settings.game_lang == "ko_KR":
+            log.warning("韩服识别模型下载已移除，使用内置识别模型（认不出韩文）")
+        OCR.use_rec_model(None)
 
     def reset_calibration(self) -> None:
         if self._detector:
@@ -221,10 +218,10 @@ class Engine:
             except Exception:
                 log.exception("数据刷新异常")
             try:
-                every = cloud.data_minutes() * 60 * random.uniform(0.9, 1.1)  # 每台电脑错开，免得新数据一发大家同时下载
-            except Exception:  # 云控出什么怪值都不能让数据线程退出
-                log.exception("读云控的数据检查间隔失败，按 6 小时")
-                every = 6 * 3600.0
+                every = DATA_SYNC_SECONDS * random.uniform(1 - DATA_SYNC_JITTER, 1 + DATA_SYNC_JITTER)
+            except Exception:  # 随机数出怪值也不能让数据线程退出
+                log.exception("计算数据检查间隔失败，按 6 小时")
+                every = float(DATA_SYNC_SECONDS)
             if hasattr(self.store, "sync_every_s"):
                 self.store.sync_every_s = every
             self._data_wake.wait(max(600.0, min(self.settings.refresh_hours * 3600 / 4, every / 2)))
@@ -277,7 +274,7 @@ class Engine:
         heroes = self.store.heroes
         if not heroes:
             return
-        new = ensure_icons(folder, heroes) if download else 0
+        new = ensure_icons(folder, heroes, transport=self.transport) if download else 0
         if new or self._icon_bank is None:
             bank = IconBank.from_dir(folder, heroes, client_icons())
             if len(bank):
@@ -301,10 +298,6 @@ class Engine:
         return {"hero_id": hid, "name": h.get("name"), "nick": h.get("nick"),
                 "win": (ranks.get(hid) or {}).get("win"), "rank": rank, "total": total,
                 "grade": rank_grade(rank, total)}
-
-    def _prefetch_hero(self, hid: str) -> None:
-        self.store.hero(hid)
-        self._panel_cache = (None, None)
 
     # ---------- 窗口状态与英雄识别 ----------
 
@@ -342,7 +335,6 @@ class Engine:
     def _set_hero_auto(self, hid: str, source: str) -> None:
         if self.state["hero_id"] != hid:
             self._set(hero_id=hid, hero_source=source)
-            threading.Thread(target=self._prefetch_hero, args=(hid,), daemon=True).start()
             self._reevaluate()
 
     def _champ_select_scan(self, hwnd: int) -> None:

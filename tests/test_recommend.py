@@ -25,13 +25,13 @@ def test_smoothing_pulls_small_samples_to_baseline():
 
 
 def test_win_rate_beats_official_tier(store):
-    # 腾讯把炽燃利息排黄金第 1（按层级/选取），但提莫带虚幻武器的胜率明显更高。
+    # 腾讯官方层级已移除：提莫带虚幻武器的胜率明显更高，结论只来自统计。
     ev = recommend.evaluate(store, "17", ["2128", "1029", "1373"])
     names = [s["name"] for s in ev["slots"]]
     assert names == ["炽燃利息", "虚幻武器", "缩小引擎"]
     assert ev["best_index"] == 1
     assert ev["slots"][1]["verdict"] == "best" and ev["slots"][1]["basis"] == "hero_win"
-    assert ev["slots"][0]["tier"] == "S"
+    assert "tier" not in ev["slots"][0]
     assert ev["slots"][1]["sample"] == "high" and ev["slots"][1]["source"] == "public"
     assert "首选「虚幻武器」" in ev["advice"]
     assert any("自采统计·16.20版本" in x for x in ev["slots"][1]["reasons"])
@@ -41,7 +41,9 @@ def test_unknown_slot_and_rare_augment(store):
     store.ranks["augments"]["1001"] = {"win": 0.5, "games": 5000}  # 别的英雄拿过，这个英雄几乎不选
     ev = recommend.evaluate(store, "17", ["1029", None, "1001"])
     assert ev["slots"][1]["verdict"] == "unknown" and ev["slots"][1]["score"] is None
-    assert ev["slots"][2]["basis"] in ("rare", "tier_only")
+    # 本英雄没有数据：退回全英雄合计，并明确标 all champs（不再用官方层级/臆造扣分）。
+    assert ev["slots"][2]["basis"] == "global_win"
+    assert "all champs" in recommend.win_text(ev["slots"][2])
     assert ev["best_index"] == 0
 
 
@@ -102,15 +104,14 @@ def test_resolve_hero_variants(store):
     assert store.resolve_hero("不存在") is None
 
 
-def test_hero_panel_merges_official_build_with_stats(store):
+def test_hero_panel_merges_stats_with_metadata(store):
     p = hero_panel(store, "17")
     assert p["win_source"] == "自采统计·16.20版本"
     by_id = {a["id"]: a for a in p["augments"]}
     assert by_id["1029"]["win"] == 0.6 and by_id["1029"]["delta"] > 0 and by_id["1029"]["source"] == "public"
-    assert by_id["2128"]["tier"] == "S"  # 官方层级保留
-    only_official = [a for a in p["augments"] if a["source"] is None]
-    assert only_official and all(a.get("tier") for a in only_official)  # 统计里没有的：只有官方层级
-    assert p["builds"]["core"] and p["skills"]
+    assert by_id["2128"]["rarity"] == "gold"  # 稀有度仍来自静态元数据
+    assert all("tier" not in a for a in p["augments"])  # 官方层级已移除
+    assert not {"builds", "skills", "partners", "splash", "spells"} & p.keys()
     assert p["rank"]["rank"] == 1 and p["rank"]["total"] == 2
 
 

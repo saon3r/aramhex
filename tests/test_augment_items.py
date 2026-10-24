@@ -42,7 +42,7 @@ def test_pbe_small_sample_display_preserves_scoring(store):
     rows["3086"] = {"games": 2, "wins": 2, "win_rate": 1.0}
     r = recommend.evaluate(store, "17", ["3086"])["slots"][0]
     assert r["win"] == 1.0 and r["games"] == 2  # 原始数据和推荐算法保持
-    assert recommend.win_text(r) == "全英雄胜率56.0% · 本英雄2局"
+    assert recommend.win_text(r) == "all champs 56.0% · 本英雄2局"
     assert 0 < r["score"] < 10
     rows["3086"] = {"games": 30, "wins": 18, "win_rate": .6}
     r = recommend.evaluate(store, "17", ["3086"])["slots"][0]
@@ -54,9 +54,9 @@ def test_live_new_augment_small_sample_uses_labelled_global_rate(store):
     rows = store.dataset.table(None)[1]["17"]
     rows["1029"] = {"games": 2, "wins": 2, "win_rate": 1.0}
     r = recommend.evaluate(store, "17", ["1029"])["slots"][0]
-    assert r["basis"] == "hero_win" and r["win"] == 1.0
-    assert r["display_win_scope"] == "global"
-    assert recommend.win_text(r).startswith("全英雄胜率")
+    # 本英雄只有 2 局：不用这个 100% 的本英雄胜率，退回全英雄合计并标 all champs。
+    assert r["basis"] == "global_win" and r["win"] != 1.0
+    assert recommend.win_text(r).startswith("all champs")
     assert "本英雄2局" in recommend.win_text(r)
 
 

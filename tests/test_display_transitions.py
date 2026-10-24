@@ -66,14 +66,13 @@ def test_badges_follow_physical_pixels_at_current_qt_scale(size, position, tmp_p
     app.processEvents()
 
 
-def test_main_window_removes_hero_and_recommendation_after_game_end(store, tmp_path, monkeypatch):
+def test_main_window_removes_hero_and_recommendation_after_game_end(store, tmp_path):
     from PySide6.QtWidgets import QApplication
     from lolhex.config import Settings
     from lolhex.engine import Engine
     from lolhex.ui.mainwindow import MainWindow
     from lolhex.vision.detector import Offer
     app = QApplication.instance() or QApplication([])
-    monkeypatch.setattr(Engine, "_prefetch_hero", lambda *a: None)
     eng = Engine(Settings(), home=tmp_path, store=store)
     window = MainWindow(eng, SimpleNamespace(set_visible=lambda *a: None))
     window.show()
@@ -82,14 +81,17 @@ def test_main_window_removes_hero_and_recommendation_after_game_end(store, tmp_p
     eng._on_offer(Offer(["2128", "1029", "1373"], [], [], [None]*3))
     window.refresh()
     app.processEvents()
-    assert "提莫" in window.hero_label.text()
-    assert "首选" in window.offer_advice.text()
+    assert "Teemo" in window.hero_label.text()
+    assert "the Swift Scout" in window.hero_label.text()
+    # 推荐建议和胜率文本仍是 Task 8 的生产者原文；这里只核对卡片上的英文标签和英文海克斯名。
+    assert any("Best" in card.text() for card in window.offer_cards)
+    assert any("Ethereal Weapon" in card.text() for card in window.offer_cards)
     eng._on_game_end()
     window.refresh()
     app.processEvents()
-    assert "未识别到英雄" in window.hero_label.text()
-    assert "还没有选英雄" in window.tab_hero.text()
-    assert "未在选海克斯" in window.offer_advice.text()
+    assert "No champion recognised" in window.hero_label.text()
+    assert "No champion selected yet" in window.tab_hero.text()
+    assert "Not picking an augment" in window.offer_advice.text()
     assert all(not card.text().strip() for card in window.offer_cards)
     folder = os.environ.get("ARAMHEX_QA_IMAGES")
     if folder:

@@ -1,11 +1,9 @@
 """外服：各语言名字表、认字匹配、选英雄界面的字、韩服识别数据下载。"""
-import hashlib
 from types import SimpleNamespace
 
 import numpy as np
-import pytest
 
-from lolhex import i18n, langpack
+from lolhex import i18n
 from lolhex.engine import augment_matcher
 from lolhex.vision import champselect
 from lolhex.vision.matcher import NameMatcher
@@ -87,47 +85,6 @@ def test_wide_boxes_for_foreign_text():
     champselect.is_champ_select(img, lambda crop: seen.append(crop.shape) or ("", 0.0))
     champselect.is_champ_select(img, lambda crop: seen.append(crop.shape) or ("", 0.0), marker="Available Champions")
     assert seen[1][1] > seen[0][1] * 3              # 外服用更宽的框
-
-
-class _Resp:
-    def __init__(self, data):
-        self.data = data
-
-    def __enter__(self):
-        return self
-
-    def __exit__(self, *a):
-        return False
-
-    def raise_for_status(self):
-        pass
-
-    def iter_content(self, n):
-        for i in range(0, len(self.data), n):
-            yield self.data[i:i + n]
-
-
-def test_langpack_download_verifies(tmp_path, monkeypatch):
-    monkeypatch.setenv("ARAMHEX_HOME", str(tmp_path))
-    data = b"x" * 1000
-    pack = {"file": "k.onnx", "size": len(data), "sha256": hashlib.sha256(data).hexdigest(),
-            "urls": ["https://a.invalid/k", "https://b.invalid/k"]}
-    calls = []
-
-    def fake_get(url, **kw):
-        calls.append(url)
-        return _Resp(b"bad" if url.startswith("https://a.") else data)  # 第一个地址给了坏文件
-    monkeypatch.setattr(langpack.requests, "get", fake_get)
-    seen = []
-    assert langpack.installed(pack) is None
-    path = langpack.download(pack, progress=lambda d, t: seen.append(d))
-    assert calls == pack["urls"] and path.read_bytes() == data and langpack.installed(pack) == path
-    assert seen[-1] == len(data) and not path.with_name("k.onnx.part").exists()
-    monkeypatch.setattr(langpack.requests, "get", lambda url, **kw: _Resp(b"bad"))
-    path.unlink()
-    with pytest.raises(ValueError):
-        langpack.download(pack)
-    assert langpack.installed(pack) is None
 
 
 def test_same_name_except_bang():

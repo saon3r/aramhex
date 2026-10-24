@@ -4,30 +4,37 @@ import functools
 import json
 import threading
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
+from pathlib import Path
 
 import pytest
 
 from conftest import make_dataset
+from httpfixtures import LocalTransport
 from lolhex.data import public
 from lolhex.data.public import Dataset, DatasetError, PublicStore, check_manifest
 
 
-@pytest.fixture
-def server(tmp_path):
-    """本地 HTTP 服务，模拟 raw.githubusercontent.com/<数据仓库>/main/。"""
-    root = tmp_path / "remote"
-    root.mkdir()
+def _serve(root: Path):
+    """本地 HTTP 服务，模拟数据仓库的目录（latest.json 在根，文件在 patches/<版本>/<模式>/）。"""
     handler = functools.partial(SimpleHTTPRequestHandler, directory=str(root))
     handler.log_message = lambda *a: None
     httpd = ThreadingHTTPServer(("127.0.0.1", 0), handler)
     threading.Thread(target=httpd.serve_forever, daemon=True).start()
-    yield root, f"http://127.0.0.1:{httpd.server_address[1]}"
+    return httpd, f"http://127.0.0.1:{httpd.server_address[1]}"
+
+
+@pytest.fixture
+def server(tmp_path):
+    root = tmp_path / "remote"
+    root.mkdir()
+    httpd, base = _serve(root)
+    yield root, base
     httpd.shutdown()
 
 
 def _publish(root, snapshot_at, patch="16.20"):
-    """按数据仓库的目录结构放一份：latest.json 在根目录，文件在 patches/<版本>/。"""
-    folder = root / "patches" / patch
+    """按数据仓库的真实目录结构放一份：latest.json 在根，文件在 patches/<版本>/normal/。"""
+    folder = root / "patches" / patch / "normal"
     manifest = make_dataset(folder, snapshot_at=snapshot_at, patch=patch)
     (folder / "latest.json").unlink()
     (root / "latest.json").write_text(json.dumps(manifest), encoding="utf-8")
@@ -90,7 +97,8 @@ def test_newer_download_wins_over_bundled(tmp_path):
 def test_sync_downloads_newer_data(tmp_path, server):
     root, base = server
     make_dataset(tmp_path / "b", snapshot_at="2026-10-13T00:00:00+08:00")
-    s = PublicStore(tmp_path / "data", bundled=tmp_path / "b", base_url=base)
+    s = PublicStore(tmp_path / "data", bundled=tmp_path / "b", base_url=base,
+                    transport=LocalTransport(base))
     _publish(root, "2026-10-13T00:00:00+08:00")
     assert s.sync_data(force=True) is False  # 和内置的一样新：不下载
     _publish(root, "2026-10-20T00:00:00+08:00", patch="16.21")
@@ -103,9 +111,10 @@ def test_sync_downloads_newer_data(tmp_path, server):
 def test_sync_rejects_tampered_download(tmp_path, server):
     root, base = server
     make_dataset(tmp_path / "b", snapshot_at="2026-10-13T00:00:00+08:00")
-    s = PublicStore(tmp_path / "data", bundled=tmp_path / "b", base_url=base)
+    s = PublicStore(tmp_path / "data", bundled=tmp_path / "b", base_url=base,
+                    transport=LocalTransport(base))
     _publish(root, "2026-10-20T00:00:00+08:00", patch="16.21")
-    (root / "patches" / "16.21" / "heroes.json").write_text("{}", encoding="utf-8")
+    (root / "patches" / "16.21" / "normal" / "heroes.json").write_text("{}", encoding="utf-8")
     assert s.sync_data(force=True) is False
     assert s.dataset.origin == "bundled" and "校验" in s.sync_error
     assert not (tmp_path / "data" / "public").exists() and not (tmp_path / "data" / "public.new").exists()
@@ -113,15 +122,30 @@ def test_sync_rejects_tampered_download(tmp_path, server):
 
 def test_sync_failure_is_quiet(tmp_path):
     make_dataset(tmp_path / "b")
-    s = PublicStore(tmp_path / "data", bundled=tmp_path / "b", base_url="http://127.0.0.1:9")
+    dead = "http://127.0.0.1:9"
+    s = PublicStore(tmp_path / "data", bundled=tmp_path / "b", base_url=dead,
+                    transport=LocalTransport(dead))
     assert s.sync_data(force=True) is False and s.sync_error and s.dataset.origin == "bundled"
+
+
+def test_default_transport_rejects_an_arbitrary_base_url(tmp_path, monkeypatch):
+    """没显式注入传输时，本地/任意 base_url 在发请求之前就被拒；统计数据保持内置那份。"""
+    make_dataset(tmp_path / "b")
+    sent = []
+    monkeypatch.setattr("requests.sessions.Session.send",
+                        lambda self, request, **kw: sent.append((request, kw)))
+    s = PublicStore(tmp_path / "data", bundled=tmp_path / "b", base_url="http://127.0.0.1:9")
+    assert s.sync_data(force=True) is False
+    assert s.sync_error and s.dataset.origin == "bundled"
+    assert sent == []
 
 
 def test_sync_disabled_only_offers(tmp_path, server):
     # 关了自动更新：只看清单，有新的就记到 data_offer 等用户点头，不下载；点头（manual）才下载
     root, base = server
     make_dataset(tmp_path / "b", snapshot_at="2026-10-13T00:00:00+08:00")
-    s = PublicStore(tmp_path / "data", bundled=tmp_path / "b", base_url=base, check_updates=False)
+    s = PublicStore(tmp_path / "data", bundled=tmp_path / "b", base_url=base,
+                    check_updates=False, transport=LocalTransport(base))
     _publish(root, "2026-10-20T00:00:00+08:00", patch="16.21")
     assert s.sync_data(force=True) is False
     assert s.dataset.origin == "bundled" and not (tmp_path / "data" / "public").exists()
@@ -135,7 +159,8 @@ def test_sync_waits_until_game_ends(tmp_path, server):
     # 对局中后台不换数据（一局里推荐前后一致），打完再换，换完记一条提示
     root, base = server
     make_dataset(tmp_path / "b", snapshot_at="2026-10-13T00:00:00+08:00")
-    s = PublicStore(tmp_path / "data", bundled=tmp_path / "b", base_url=base)
+    s = PublicStore(tmp_path / "data", bundled=tmp_path / "b", base_url=base,
+                    transport=LocalTransport(base))
     _publish(root, "2026-10-20T00:00:00+08:00", patch="16.21")
     in_game = [True]
     s.hold = lambda: in_game[0]
@@ -157,71 +182,51 @@ def test_real_bundled_data_is_valid():
 
 
 def test_sync_falls_back_to_mirror(tmp_path, server):
-    """GitHub 连不上（国内常见）：换下一个镜像下载；第一个镜像数据被改过也会换下一个。"""
+    """第一个地址不可用（这里被策略拒绝）：换下一个地址下载。"""
     root, base = server
     make_dataset(tmp_path / "b", snapshot_at="2026-10-13T00:00:00+08:00")
     _publish(root, "2026-10-20T00:00:00+08:00", patch="16.21")
-    s = PublicStore(tmp_path / "data", bundled=tmp_path / "b", base_url=["http://127.0.0.1:9", base])
+    s = PublicStore(tmp_path / "data", bundled=tmp_path / "b",
+                    base_url=["http://127.0.0.1:9", base], transport=LocalTransport(base))
     assert s.sync_data(force=True) is True
     assert s.data_source == base and s.dataset.patch == "16.21"
 
 
 def test_sync_skips_tampered_mirror(tmp_path, server):
+    """第一个镜像的数据被改过：换下一个镜像。两个镜像都是真实路径形状。"""
     root, base = server
-    bad = tmp_path / "remote" / "bad"
-    make_dataset(tmp_path / "b", snapshot_at="2026-10-13T00:00:00+08:00")
-    _publish(root, "2026-10-20T00:00:00+08:00", patch="16.21")
-    _publish(bad, "2026-10-20T00:00:00+08:00", patch="16.21")
-    (bad / "patches" / "16.21" / "heroes.json").write_text("{}", encoding="utf-8")
-    s = PublicStore(tmp_path / "data", bundled=tmp_path / "b", base_url=[base + "/bad", base])
-    assert s.sync_data(force=True) is True and s.data_source == base
+    bad = tmp_path / "bad_remote"
+    bad.mkdir()
+    bad_httpd, bad_base = _serve(bad)
+    try:
+        make_dataset(tmp_path / "b", snapshot_at="2026-10-13T00:00:00+08:00")
+        _publish(root, "2026-10-20T00:00:00+08:00", patch="16.21")
+        _publish(bad, "2026-10-20T00:00:00+08:00", patch="16.21")
+        (bad / "patches" / "16.21" / "normal" / "heroes.json").write_text("{}", encoding="utf-8")
+        s = PublicStore(tmp_path / "data", bundled=tmp_path / "b",
+                        base_url=[bad_base, base], transport=LocalTransport(bad_base, base))
+        assert s.sync_data(force=True) is True and s.data_source == base
+    finally:
+        bad_httpd.shutdown()
 
-def _publish_tag(root, seq, snapshot_at, patch="16.21"):
-    """模拟 jsDelivr 按 tag 取：<root>/data-v<seq>/latest.json + patches/..."""
-    folder = root / f"data-v{seq}"
-    manifest = make_dataset(folder / "patches" / patch, snapshot_at=snapshot_at, patch=patch, seq=seq)
-    (folder / "patches" / patch / "latest.json").unlink()
-    (folder / "latest.json").write_text(json.dumps(manifest), encoding="utf-8")
-
-
-def test_github_down_probes_data_tags(tmp_path, server):
-    """GitHub 连不上：按 data-v<序号+1>、+2… 试探 jsDelivr，取最新的一份（@main 的缓存是旧的）。"""
-    root, base = server
-    host = base.split("//")[1]
-    make_dataset(tmp_path / "b", snapshot_at="2026-10-13T00:00:00+08:00", seq=1)
-    _publish_tag(root, 2, "2026-10-20T00:00:00+08:00")
-    _publish_tag(root, 3, "2026-10-27T00:00:00+08:00", patch="16.22")
-    _publish(root, "2026-10-13T00:00:00+08:00")  # "@main" 还是旧的（缓存）
-    s = PublicStore(tmp_path / "data", bundled=tmp_path / "b", base_url=["http://127.0.0.1:9", base],
-                    tag_hosts=(host,), tag_fmt="http://{host}/data-v{seq}")
-    assert s.sync_data(force=True) is True
-    assert s.dataset.patch == "16.22" and s.dataset.seq == 3 and s.data_source.endswith("/data-v3")
-
-
-def test_no_newer_tag_falls_back_to_branch(tmp_path, server):
-    root, base = server
-    host = base.split("//")[1]
-    make_dataset(tmp_path / "b", snapshot_at="2026-10-13T00:00:00+08:00", seq=5)
-    _publish(root, "2026-10-20T00:00:00+08:00", patch="16.21")
-    s = PublicStore(tmp_path / "data", bundled=tmp_path / "b", base_url=["http://127.0.0.1:9", base],
-                    tag_hosts=(host,), tag_fmt="http://{host}/data-v{seq}")
-    assert s.sync_data(force=True) is True and s.data_source == base
 
 def test_data_download_reports_progress(tmp_path, server):
     root, base = server
     make_dataset(tmp_path / "b", snapshot_at="2026-10-13T00:00:00+08:00")
     manifest = _publish(root, "2026-10-20T00:00:00+08:00", patch="16.21")
     seen = []
-    public.download(base, manifest, tmp_path / "dl", progress=lambda d, t: seen.append((d, t)))
+    public.download(base, manifest, tmp_path / "dl", progress=lambda d, t: seen.append((d, t)),
+                    transport=LocalTransport(base))
     total = sum(f["size"] for f in manifest["files"].values())
     assert seen[-1] == (total, total)
-    s = PublicStore(tmp_path / "data", bundled=tmp_path / "b", base_url=base)
+    s = PublicStore(tmp_path / "data", bundled=tmp_path / "b", base_url=base,
+                    transport=LocalTransport(base))
     assert s.status()["data_progress"] is None  # 不在下载时没有进度
 
 
 def _normalize(root, patch):
     """把发布目录里的文件按数据仓库导出的写法重写一遍（胜率 = round(胜场/局数, 6)），重算清单。"""
-    folder = root / "patches" / patch
+    folder = root / "patches" / patch / "normal"
     manifest = json.loads((root / "latest.json").read_text(encoding="utf-8"))
     for name in manifest["files"]:
         obj = json.loads((folder / name).read_text(encoding="utf-8"))
@@ -243,11 +248,12 @@ def test_pack_download_restores_exact_files(tmp_path, server):
     _publish(root, "2026-10-20T00:00:00+08:00", patch="16.21")
     folder, manifest = _normalize(root, "16.21")
     pack = public.make_pack(folder, manifest)
-    (root / "patches" / "16.21.pack.xz").write_bytes(pack)
+    (root / "patches" / "16.21" / "normal.pack.xz").write_bytes(pack)
     # 压缩包可用时，逐个文件的地址都删掉：证明数据确实来自压缩包
     for name in manifest["files"]:
         (folder / name).rename(folder / (name + ".bak"))
-    s = PublicStore(tmp_path / "data", bundled=tmp_path / "b", base_url=base)
+    s = PublicStore(tmp_path / "data", bundled=tmp_path / "b", base_url=base,
+                    transport=LocalTransport(base))
     assert s.sync_data(force=True) is True and s.dataset.patch == "16.21"
     assert len(pack) < sum(f["size"] for f in manifest["files"].values())
 
@@ -256,36 +262,10 @@ def test_bad_pack_falls_back_to_files(tmp_path, server):
     root, base = server
     make_dataset(tmp_path / "b", snapshot_at="2026-10-13T00:00:00+08:00")
     _publish(root, "2026-10-20T00:00:00+08:00", patch="16.21")
-    (root / "patches" / "16.21.pack.xz").write_bytes(b"not xz")
-    s = PublicStore(tmp_path / "data", bundled=tmp_path / "b", base_url=base)
+    (root / "patches" / "16.21" / "normal.pack.xz").write_bytes(b"not xz")
+    s = PublicStore(tmp_path / "data", bundled=tmp_path / "b", base_url=base,
+                    transport=LocalTransport(base))
     assert s.sync_data(force=True) is True and s.dataset.patch == "16.21"
-
-
-def test_event_mode_uses_event_dataset(tmp_path, server):
-    root, base = server
-    make_dataset(tmp_path / "b", snapshot_at="2026-10-13T00:00:00+08:00")
-    m = _publish(root, "2026-10-13T00:00:00+08:00")
-    ev_folder = root / "patches" / "16.20-fp"
-    ev = make_dataset(ev_folder, snapshot_at="2026-10-15T00:00:00+08:00", bands=False)
-    (ev_folder / "latest.json").unlink()
-    ev.update(mode="first-prismatic", mode_label="首次必棱彩", path="patches/16.20-fp")
-    (root / "index.json").write_text(json.dumps({"schema_version": 1, "datasets": [m, ev]}), encoding="utf-8")
-    event = [None]
-    s = PublicStore(tmp_path / "data", bundled=tmp_path / "b", base_url=base, event_source=lambda: event[0])
-    assert s.sync_data(force=True) is False and s.dataset.mode == "normal"
-    event[0] = {"mode": "first-prismatic", "label": "首次必棱彩"}
-    assert s.sync_data(force=True) is True and s.dataset.mode == "first-prismatic"
-    st = s.status()
-    assert st["dataset_mode_label"] == "首次必棱彩" and not st["event_fallback"]
-    event[0] = {"mode": "gold-reroll", "label": "金色刷新"}  # 活动数据还没出：先用常规并提示
-    s.sync_data(force=True)
-    st = s.status()
-    assert s.dataset.mode == "normal" and st["event_fallback"] and st["event_label"] == "金色刷新"
-    from lolhex.ui.data_status import data_status_html
-    assert "金色刷新的数据还没出" in data_status_html(st)
-    event[0] = None  # 活动结束：回到常规
-    s.sync_data(force=True)
-    assert s.dataset.mode == "normal" and not s.status()["event_fallback"]
 
 
 def test_old_top_band_setting_becomes_high(tmp_path):
@@ -325,7 +305,7 @@ def test_optional_spells_and_items_files(store):
     assert d["item_stats"][0]["item"]["id"] == "3115" and abs(d["item_stats"][0]["win"] - 0.54) < 1e-9
     from lolhex.ui import buildview
     html = "<br>".join(buildview.lines(d, None, True))
-    assert "召唤师技能" in html and "常出装备" in html
+    assert "Summoner spells" in html and "Common items" in html
 
 
 def test_summoners_pick_over_10pct_sorted_by_win_top2():
@@ -348,8 +328,8 @@ def test_overlay_summoners_show_win_rate():
          "summoner_source": "自采统计"}
     compact = buildview.lines(d, None, True, compact=True)
     rows = [x for x in compact if "闪现" in x]
-    assert len(rows) == 2 and "胜率 53.4% · 出场 90.0%" in rows[0] and "胜率 51.0% · 出场 10.0%" in rows[1]
+    assert len(rows) == 2 and "Win rate 53.4% · Pick rate 90.0%" in rows[0] and "Win rate 51.0% · Pick rate 10.0%" in rows[1]
     off = "".join(buildview.lines(d, None, False, compact=True))
-    assert "胜率" not in off and "出场 90.0%" in off
+    assert "Win rate" not in off and "Pick rate 90.0%" in off
     full = "".join(buildview.lines(d, None, True))
-    assert "胜率 53.4% · 出场 90.0%" in full
+    assert "Win rate 53.4% · Pick rate 90.0%" in full
