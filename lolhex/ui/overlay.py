@@ -22,7 +22,6 @@ from PySide6.QtWidgets import (QApplication, QHBoxLayout, QLabel, QLineEdit, QPu
 from .. import recommend
 from ..data.metadata import display_augment_name, display_hero_name, display_hero_title
 from ..messages import tr
-from ..recommend import NODATA_NOTE
 from ..vision import window as win
 from . import buildview, single_instance
 from .autoshot import AutoShot

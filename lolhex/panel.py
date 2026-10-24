@@ -4,6 +4,7 @@
 from __future__ import annotations
 
 from . import recommend
+from .messages import tr
 
 
 # 召唤师技能组合：只放出场率 ≥10% 的，按胜率排，最多两组（用户 10-22 定）。
@@ -39,7 +40,7 @@ def hero_panel(store, hero_key, k: int = 300) -> dict | None:
             d = (blend.get(a["id"]) or {}).get("delta")
         elif x.get("win") is not None and x.get("games") and ag.get("sample_win") is not None:
             d = recommend.smoothed_delta(x["win"], x["games"], ag["sample_win"], k)
-        augs.append({**a, "name": meta.get("name", a["id"]), "icon": meta.get("icon"),
+        augs.append({**a, "name": recommend.augment_label(a["id"], meta), "icon": meta.get("icon"),
                      "desc": meta.get("desc"), "win": x.get("win"), "games": x.get("games"),
                      "source": ("pbe" if a["id"] in provisional else "public") if x else None,
                      "delta": None if d is None else round(d, 2),
@@ -70,7 +71,7 @@ def hero_panel(store, hero_key, k: int = 300) -> dict | None:
         "augments": augs,
         "date": data.get("date"), "patch": store.static.get("patch"),
         "data_patch": ag.get("patch"), "data_revision": (store.status().get("dataset_revision")),
-        "win_source": ag.get("label") or "暂无统计数据", "summoners": summoners,
+        "win_source": ag.get("label") or tr("data.no_stats"), "summoners": summoners,
         "summoner_source": sum_src if summoners else "", "summoner_source_date": str(getattr(getattr(store, "dataset", None), "snapshot_at", "") or "")[:10] or None,
         "item_stats": item_stats,
     }

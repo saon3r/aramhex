@@ -1,4 +1,5 @@
 from lolhex import recommend
+from lolhex.messages import tr
 from lolhex.panel import hero_panel
 
 
@@ -28,13 +29,13 @@ def test_win_rate_beats_official_tier(store):
     # 腾讯官方层级已移除：提莫带虚幻武器的胜率明显更高，结论只来自统计。
     ev = recommend.evaluate(store, "17", ["2128", "1029", "1373"])
     names = [s["name"] for s in ev["slots"]]
-    assert names == ["炽燃利息", "虚幻武器", "缩小引擎"]
+    assert names == ["Combusting Interest", "Ethereal Weapon", "Shrink Engine"]
     assert ev["best_index"] == 1
     assert ev["slots"][1]["verdict"] == "best" and ev["slots"][1]["basis"] == "hero_win"
     assert "tier" not in ev["slots"][0]
     assert ev["slots"][1]["sample"] == "high" and ev["slots"][1]["source"] == "public"
-    assert "首选「虚幻武器」" in ev["advice"]
-    assert any("自采统计·16.20版本" in x for x in ev["slots"][1]["reasons"])
+    assert 'Best pick: "Ethereal Weapon"' in ev["advice"]
+    assert any("Self-collected stats · patch 16.20" in x for x in ev["slots"][1]["reasons"])
 
 
 def test_unknown_slot_and_rare_augment(store):
@@ -51,7 +52,7 @@ def test_without_hero_uses_all_heroes_win_rate(store):
     ev = recommend.evaluate(store, None, ["2128", "1029", "1373"])
     assert all(s["basis"] == "global_win" for s in ev["slots"])
     assert ev["best_index"] == 1
-    assert "未识别英雄" in ev["advice"]
+    assert "no champion recognised" in ev["advice"]
 
 
 def test_all_below_baseline_suggests_reroll(store):
@@ -60,7 +61,7 @@ def test_all_below_baseline_suggests_reroll(store):
         augs["17"][aid] = {"games": 50000, "wins": 22500, "win_rate": 0.45}
     ev = recommend.evaluate(store, "17", ["2128", "1029", "1373"])
     assert all(s["verdict"] in ("best", "reroll") for s in ev["slots"])
-    assert ev["advice"].startswith("三张都不理想")
+    assert ev["advice"].startswith("None of the three is good")
 
 
 def test_thin_sample_is_never_first_choice(store):
@@ -73,14 +74,14 @@ def test_thin_sample_is_never_first_choice(store):
     thin = ev["slots"][1]
     assert thin["score"] > ev["slots"][0]["score"]
     assert thin["thin"] == "too_few" and thin["verdict"] == "reroll"
-    assert "样本太少" in ev["advice"]
+    assert "the sample is too small to trust" in ev["advice"]
 
 
 def test_band_changes_hero_baseline_and_augment_win(store):
     store.set_band("high")
     ev = recommend.evaluate(store, "17", ["1029", None, None])
     assert ev["slots"][0]["games"] == 500 and abs(ev["slots"][0]["win"] - 0.56) < 1e-6
-    assert any("前 5%" in x for x in ev["slots"][0]["reasons"])
+    assert any("Top 5%" in x for x in ev["slots"][0]["reasons"])
     store.set_band(None)
     assert recommend.evaluate(store, "17", ["1029", None, None])["slots"][0]["games"] == 40000
 
@@ -106,7 +107,7 @@ def test_resolve_hero_variants(store):
 
 def test_hero_panel_merges_stats_with_metadata(store):
     p = hero_panel(store, "17")
-    assert p["win_source"] == "自采统计·16.20版本"
+    assert p["win_source"] == "Self-collected stats · patch 16.20"
     by_id = {a["id"]: a for a in p["augments"]}
     assert by_id["1029"]["win"] == 0.6 and by_id["1029"]["delta"] > 0 and by_id["1029"]["source"] == "public"
     assert by_id["2128"]["rarity"] == "gold"  # 稀有度仍来自静态元数据
@@ -122,9 +123,9 @@ def test_excluded_augment_has_no_data(store):
     ev = recommend.evaluate(store, "17", ["1373", "1029", "2128"])
     s = ev["slots"][0]
     assert s["verdict"] == "nodata" and s["score"] is None and s["basis"] == "excluded"
-    assert s["name"] == "缩小引擎" and recommend.NODATA_NOTE in s["reasons"]
+    assert s["name"] == "Shrink Engine" and tr("augment.note.nodata") in s["reasons"]
     assert "tier" not in s
-    assert ev["best_index"] == 1 and "缩小引擎" not in ev["advice"]
+    assert ev["best_index"] == 1 and "Shrink Engine" not in ev["advice"]
 
 
 
@@ -134,7 +135,7 @@ def test_new_augment_without_stats_has_no_data(store):
     ev = recommend.evaluate(store, "17", ["9999", "1029", "2128"])
     s = ev["slots"][0]
     assert s["verdict"] == "nodata" and s["basis"] == "new" and s["score"] is None
-    assert recommend.NEW_NOTE in s["reasons"]
+    assert tr("augment.note.new") in s["reasons"]
     assert ev["best_index"] != 0
     # 有统计的海克斯即使标了新，也照常按胜率算
     store.augments["1029"] = {**store.augments.get("1029", {}), "new": True}
@@ -161,7 +162,7 @@ def test_provisional_augment_uses_pbe_total_and_skips_thin_rule(store):
     s = ev["slots"][0]
     assert s["basis"] == "pbe" and not s.get("thin") and s["verdict"] in ("ok", "best")
     assert 4.0 < s["score"] < 7.0  # 合计 +6pp 打底，本英雄 40 局 60% 微调
-    assert any("测试服" in x for x in s["reasons"])
+    assert any("PBE" in x for x in s["reasons"])
     assert ev["slots"][1]["verdict"] == "reroll" and ev["best_index"] == 2
     # 本英雄在测试服一局没有：只按合计
     del store.dataset.table(None)[1]["17"]["3086"]
@@ -201,7 +202,7 @@ def test_band_tiny_sample_does_not_beat_overall(store):
     tiny = ev["slots"][0]
     assert tiny["games"] == 80 and tiny["games_all"] == 30000 and abs(tiny["win"] - 0.95) < 1e-9
     assert -1.5 < tiny["score"] < 1.0  # 基本按全体（−1pp）算
-    assert any("全体 30000局" in x and "按局数综合" in x for x in tiny["reasons"])
+    assert any("all players 30000 games" in x and "blended delta" in x for x in tiny["reasons"])
 
 
 def test_band_large_sample_follows_band(store):
@@ -254,12 +255,12 @@ def test_pentakill_cards_named_by_skill_and_rates_shown(store):
     store.dataset.meta["provisional_augments"] = {aid: {"games": 9000, "wins": 4600, "win_rate": 0.511}
                                                   for aid in names}
     ev = recommend.evaluate(store, "17", ["3170", "3171", "3172"])
-    assert [s["name"] for s in ev["slots"]] == ["重型（强化 Q）", "力量（强化 W）", "鞭挞（强化 E）"]
+    assert [s["name"] for s in ev["slots"]] == ["HEAVY (empowers Q)", "POWER (empowers W)", "THRASH (empowers E)"]
     pk = ev["pentakill"]
     assert pk["hero"] and pk["pbe"] and [r["key"] for r in pk["rows"]] == ["Q", "W", "E"]
     text = recommend.pentakill_text(pk)
-    assert text.startswith("五杀乐队（本英雄，测试服数据）：Q 50.0%（400 局）") and " R " not in text
-    assert "首选「" in ev["advice"] and "（强化 " in ev["advice"]
+    assert text.startswith("Pentakill (this champion, PBE data): Q 50.0% (400 games)") and " R " not in text
+    assert 'Best pick: "' in ev["advice"] and "(empowers " in ev["advice"]
     # 普通三选一没有五杀乐队的卡：不带这一行
     assert recommend.evaluate(store, "17", ["2128", "1029", "1373"])["pentakill"] is None
     assert recommend.pentakill_text(None) == ""

@@ -101,11 +101,11 @@ Fanning out is allowed; shared state is not.
   is proven against `tests/fixtures/real-mayhem-augment-screen.png`; the app launches.
   Champion select was the one unchecked item and was verified live in milestone 2.
 - **Milestone 2 — verified (issue #3).** English UI/catalog gates and the full suite pass
-  (514 tests). Real ordinary refresh, cold/warm offline startup, fixture OCR, three badges,
-  live bench recognition and one full English-client ARAM: Mayhem game are all verified.
-  Known imperfections — a one-cycle `Unknown` flicker on one card and lingering badges — and
-  the deferred non-UI text polish are recorded in the evidence doc and follow-up issue.
-  Evidence: `docs/superpowers/verification/2026-10-24-milestone-2.md`.
+  (521 tests after the follow-up). Real ordinary refresh, cold/warm offline startup, fixture
+  OCR, three badges, live bench recognition and one full English-client ARAM: Mayhem game are
+  all verified. The advice/panel Chinese the first game exposed was fixed in PR #13 (#11):
+  producers now render through the catalogue and use `name_en`. Evidence:
+  `docs/superpowers/verification/2026-10-24-milestone-2.md`.
 
 ## Environment (already set up on this machine)
 
@@ -237,6 +237,20 @@ CommunityDragon paths to regenerate bundled tables; they never import Tencent en
 - **Policy tests must use the shipped manifest's paths.** Stats live under
   `patches/<patch>/normal` (including `normal.pack.xz`); mode-less test-server paths
   once hid a policy that blocked every real stats payload despite a green suite.
+- **The UI gate only covers `lolhex/ui/*.py` literals.** Advice, badge lines, provenance and
+  the panel table are assembled by `recommend.py`, `data/public.py` and `panel.py`, so they can
+  be Chinese while the AST gate is green — that is exactly what happened, and the owner saw it
+  in a game. `tests/test_render_localisation.py` covers the producer output; put any new
+  player-visible string through the catalogue and that gate, not just `tr()` in the UI.
+- **Display names are `name_en`, never `name`.** The Chinese `name` in `store.augments`/
+  `store.heroes` is what the OCR matcher scores against; using it for display leaks Chinese
+  into the panel. `recommend.augment_label()` is the display accessor.
+- **Acceptance runs need `--debug`.** Auto screenshots are debug-only, so a normal
+  (`--minimized`) run leaves no captures to review afterwards — the log still records what was
+  published, but the visual proof is gone. Launch acceptance games with `--debug`.
+- **Offscreen Qt has no usable fonts here.** `QT_QPA_PLATFORM=offscreen` renders text as boxes
+  and positions `BadgeLayer` painting in logical pixels, so a badge render looks like a
+  different, broken layout. Render with the windows platform and `layer.grab()`.
 - **RapidOCR has its own model downloader.** Null model paths can trigger direct
   `modelscope.cn` requests if a bundled ONNX model is missing, empty or has a bad hash,
   bypassing our HTTP boundary. Pin local Det/Rec/Cls paths and fail closed; tests must

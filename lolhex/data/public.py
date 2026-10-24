@@ -27,6 +27,7 @@ import time
 from pathlib import Path
 
 from .. import DATA_REPO, MIRROR
+from ..messages import quantity, short_date, tr
 from . import http, metadata
 from .store import CHERRY_AUGMENTS, DataStore, _rarity, _read
 
@@ -40,6 +41,19 @@ def headers() -> dict[str, str]:
 # 1.1.1 起只分三档（数据里 high、top 早就合成了「前 5%」，bands/top 和 bands/high 内容相同）
 BANDS = {"casual": "娱乐", "mid": "中分", "high": "前 5%"}
 BAND_ALIASES = {"top": "high"}  # 老设置文件、查分服务里的 top 当 high
+
+
+def _mode_label(dataset) -> str | None:
+    """非普通模式的显示名。数据集的 mode_label 是中文，能不用就不用：用模式代码写成英文。
+
+    普通模式（normal）不显示；数据集给了 ASCII 标签（以后可能改成英文）才用它。
+    """
+    if dataset is None or dataset.mode == "normal":
+        return None
+    label = str(getattr(dataset, "mode_label", "") or "")
+    if label.isascii() and label.strip():
+        return label
+    return str(dataset.mode).replace("-", " ").replace("_", " ").strip().title()
 
 
 def norm_band(band):
@@ -464,15 +478,18 @@ class PublicStore(DataStore):
 
     @staticmethod
     def _describe(remote: dict) -> str:
-        """「16.20 版本，截至 10-17，3699 万局」"""
-        parts = [f"{remote['patch']} 版本"] if remote.get("patch") else []
-        if remote.get("snapshot_at"):
-            parts.append("截至 " + str(remote["snapshot_at"])[5:10])
+        """「patch 16.20, as of 17 Oct, 5.1M games」——显示给玩家的文字，走目录。"""
+        parts = []
+        if remote.get("patch"):
+            parts.append(tr("data.describe.patch", patch=remote["patch"]))
+        day = short_date(remote.get("snapshot_at"))
+        if day:
+            parts.append(tr("data.describe.as_of", date=day))
         m = remote.get("matches")
         m = m.get("valid") if isinstance(m, dict) else m
         if isinstance(m, int) and m > 0:
-            parts.append(f"{m / 1e4:.0f} 万局" if m >= 1e4 else f"{m} 局")
-        return "，".join(parts)
+            parts.append(tr("data.describe.games", games=quantity(m)))
+        return tr("common.list_separator").join(parts)
 
     def _look_for_offer(self) -> None:
         """关了自动更新时：只读清单，看看有没有更新的数据（不下载）。连不上就算了，下次再看。"""
@@ -502,7 +519,8 @@ class PublicStore(DataStore):
         if self.reload_dataset():
             self.data_updated_at = time.time()
             self.data_offer = None
-            self.data_note = {"id": self.dataset.revision, "text": "数据已更新：" + self._describe(remote)}
+            self.data_note = {"id": self.dataset.revision,
+                          "text": tr("data.note.updated", summary=self._describe(remote))}
             return True
         return False
 
@@ -557,10 +575,13 @@ class PublicStore(DataStore):
         return {str(aid): v for aid, v in pv.items() if isinstance(v, dict) and v.get("games")} if isinstance(pv, dict) else {}
 
     def label(self) -> str:
+        """数据来源的显示文字（英文；分段在目录里）。"""
         if not self.dataset:
-            return "暂无统计数据"
+            return tr("data.no_stats")
         band = self.effective_band()
-        return f"自采统计·{self.dataset.patch}版本" + (f"·{BANDS[band]}" if band else "")
+        if band:
+            return tr("data.label", patch=self.dataset.patch, band=tr(f"band.{band}"))
+        return tr("data.label_patch", patch=self.dataset.patch)
 
     # ---------- 查询（panel / recommend 用） ----------
 
@@ -587,7 +608,7 @@ class PublicStore(DataStore):
                 "augments": {aid: {"games": a["games"], "wins": a["wins"], "win": a["win_rate"],
                                    "low_sample": a.get("low_sample", False)}
                              for aid, a in (hero_augs.get(str(hero_id)) or {}).items()},
-                "band": band, "band_label": BANDS.get(band)}
+                "band": band, "band_label": tr(f"band.{band}") if band else None}
 
     def _hero_rows(self, name: str, hero_id: str) -> tuple[list[dict], str]:
         """hero_spells / hero_items 里这个英雄的各行：[{key, games, wins, win}]，按局数从多到少。"""
@@ -680,7 +701,7 @@ class PublicStore(DataStore):
                  dataset_label=self.label(), bands_available=self.bands_available(),
                  band=self.band, band_effective=self.effective_band(),
                  dataset_mode=ds.mode if ds else None,
-                 dataset_mode_label=(ds.mode_label or ds.mode) if ds and ds.mode != "normal" else None,
+                 dataset_mode_label=_mode_label(ds),
                  data_updated_at=self.data_updated_at, sync_error=self.sync_error,
                  data_progress=self.sync_progress, data_note=self.data_note, data_offer=self.data_offer)
         return s
