@@ -60,7 +60,7 @@ def set_language(language: str) -> None:
     _language = wanted if wanted in _load() else FALLBACK_UI_LANG
 
 
-def tr(key: str, **values: object) -> str:
+def tr(key: str, /, **values: object) -> str:
     """取一条文案并填占位符。键缺失返回键名（记警告）；占位符对不上直接抛错（调用方的 bug）。"""
     catalog = _load()
     template = (catalog.get(_resolve_language()) or {}).get(key)
