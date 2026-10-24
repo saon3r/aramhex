@@ -36,6 +36,9 @@ The owner does exactly two things:
 If a step seems to need the owner, first ask whether it can be automated or verified
 another way. It usually can.
 
+The owner may ask to be walked through GitHub for learning. That is optional and never a
+dependency — do the work either way.
+
 Two consequences worth spelling out:
 
 - **Report conclusions, not output.** The agent reads the logs, JSON, screenshots and test
@@ -44,9 +47,6 @@ Two consequences worth spelling out:
 - **Git and GitHub writes are pre-authorised.** Branches, commits, PRs, merges into `main`,
   issue comments and closures need no owner approval. Ask only when scope, risk or
   acceptance materially changes — never for a technical choice, a diff or a test result.
-
-The owner may ask to be walked through GitHub for learning. That is optional and never a
-dependency — do the work either way.
 
 ## Parallel workers
 
