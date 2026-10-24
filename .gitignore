@@ -6,3 +6,6 @@ dist/
 .pytest_cache/
 *.spec.bak
 lolhex/data/bundled.new/
+
+# our local captures and scratch
+screenshots/
