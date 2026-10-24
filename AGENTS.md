@@ -99,10 +99,12 @@ Fanning out is allowed; shared state is not.
 
 - **Milestone 1 — verified.** Upstream runs unmodified on this client. The augment screen
   is proven against `tests/fixtures/real-mayhem-augment-screen.png`; the app launches.
-  *Still unchecked:* champion select, which needs a live client in a queue.
-- **Milestone 2 — in progress (issue #3).** English UI/catalog gates and the full suite
-  pass (514 tests). Real ordinary refresh, cold/warm offline startup, fixture OCR and
-  three badges are verified. **Still open:** live bench recognition and a full game.
+  Champion select was the one unchecked item and was verified live in milestone 2.
+- **Milestone 2 — verified (issue #3).** English UI/catalog gates and the full suite pass
+  (514 tests). Real ordinary refresh, cold/warm offline startup, fixture OCR, three badges,
+  live bench recognition and one full English-client ARAM: Mayhem game are all verified.
+  Known imperfections — a one-cycle `Unknown` flicker on one card and lingering badges — and
+  the deferred non-UI text polish are recorded in the evidence doc and follow-up issue.
   Evidence: `docs/superpowers/verification/2026-10-24-milestone-2.md`.
 
 ## Environment (already set up on this machine)
@@ -209,7 +211,9 @@ CommunityDragon paths to regenerate bundled tables; they never import Tencent en
   `Khazix`, `Fiddlesticks` vs `FiddleSticks`). Use `static_fallback.json`; a case-insensitive
   fallback covers old bundled bytes.
 - **Files are UTF-8 without BOM.** Windows PowerShell 5.1 `Get-Content` mangles them; use
-  `-Encoding UTF8` or the `read` tool.
+  `-Encoding UTF8` or the `read` tool. The same mangling applies to `git show` output piped
+  into a PowerShell string comparison: an em dash comes back as `-`, so an identical section
+  looks changed. Compare with Python or `git diff` before believing a "not identical" result.
 - **Capture resolution varies.** The fixture is 2560×1440; an earlier session logged
   3840×2160. Never hardcode pixels — upstream stores layout as fractions for this reason.
 - **The overlay must not read itself.** Upstream's layers are excluded from capture.

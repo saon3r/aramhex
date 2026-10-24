@@ -1,8 +1,8 @@
 # Privacy
 
 AramHex is a personal, screen-reading overlay for League of Legends ARAM: Mayhem. This
-document describes the current data behaviour and network scope, and is explicit about
-which acceptance checks are **not yet verified**.
+document describes the current data behaviour and network scope, and names the one check
+that has not been performed (a frozen executable build).
 
 ## No telemetry, identity or remote control
 
@@ -42,7 +42,7 @@ Runtime downloads are limited to anonymous GET requests for these purposes:
 |---|---|
 | `aramhex.com/u/data/` | stats manifest and stats payloads |
 | `raw.githubusercontent.com/czgreat/aramhex-data/main/` | stats fallback |
-| `ddragon.leagueoflegends.com/api/versions.json` and `/cdn/<version>/data/en_US/{champion,item}.json` | version discovery and English champion/item metadata |
+| `ddragon.leagueoflegends.com/api/versions.json` and `/cdn/<version>/data/{en_US,en_GB}/{champion,item}.json` | version discovery and English champion/item metadata (the refresher currently requests `en_US`; the policy also admits the equivalent `en_GB` paths) |
 | `ddragon.leagueoflegends.com/cdn/<version>/img/champion/…png` and `/img/item/…png` | champion portraits (cached) and on-demand item icons |
 | `raw.communitydragon.org/…/global/default/v1/cherry-augments.json` | static augment metadata (name/rarity) only; no icons or splash art |
 
@@ -56,11 +56,12 @@ a failed or malformed refresh keeps the last valid cache and the bundled fallbac
   lookup, self-update/patching, Korean OCR model download, Tencent static metadata
   (`game.gtimg.cn`, `mlol.qt.qq.com`) and the old fixed jsDelivr stats mirrors have been
   removed. Static metadata now comes from Data Dragon and CommunityDragon as listed above.
-- Ordinary background refresh and both warm-cache and fresh bundled-only startup have
-  been verified through the real application entry point, including network-denied runs.
-  Details and remaining live-game checks are recorded in
+- Ordinary background refresh, both warm-cache and fresh bundled-only startup, real fixture
+  OCR with three rendered badges, live champion-select/bench recognition and one full
+  English-client game have all been verified through the real application entry point,
+  including network-denied runs. Details are recorded in
   `docs/superpowers/verification/2026-10-24-milestone-2.md`. This is not a claim that a
-  frozen executable has been built or that live bench/game acceptance has passed.
+  frozen executable has been built.
 
 ## Attribution and licence boundaries
 
