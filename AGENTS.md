@@ -103,6 +103,8 @@ Comments and docstrings are Chinese and are the real documentation — keep them
 - **The overlay must not read itself.** Upstream's layers are excluded from capture.
 - **Forks arrive with GitHub Issues disabled**, and `gh pr create` defaults to opening the
   PR against *upstream*. Use `gh pr create --repo saon3r/aramhex`.
+- **GitHub CLI is not on PATH in a fresh shell.** Use
+  `& "C:\Program Files\GitHub CLI\gh.exe"` in PowerShell.
 - **The raw capture is not committed.** `screenshots/` is gitignored because it contains
   other players' Riot IDs. `tests/fixtures/real-mayhem-augment-screen.png` is the redacted
   version — use it, and keep future fixtures redacted too.
