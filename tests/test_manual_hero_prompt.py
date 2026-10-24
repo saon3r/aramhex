@@ -17,7 +17,7 @@ def test_missing_hero_prompt_and_next_game(store, tmp_path, monkeypatch, manual)
     engine._set(phase="ingame")
     panel.update_from(engine.snapshot())
     assert panel.expanded
-    assert "未识别到英雄，请手动选择" in panel.hero_label.text()
+    assert "No champion recognised - pick one manually" in panel.hero_label.text()
     panel.toggle()
     panel.update_from(engine.snapshot())
     assert not panel.expanded  # 用户收起后不反复打扰。

@@ -134,8 +134,8 @@ def test_rank_grade_and_summary():
           "bench": [{"hero_id": "2", "name": "奥拉夫", "win": 0.464, "grade": "C"},
                     {"hero_id": "3", "name": "霞", "win": 0.492, "grade": "B"}]}
     s = champ_select_summary(cs)
-    assert s.index("霞") < s.index("奥拉夫")  # 按胜率排序
-    assert "↑2.2" in s and "你：韦鲁斯" in s
+    assert s.index("Galio") < s.index("Olaf")  # 按胜率排序
+    assert "↑2.2" in s and "you: Annie" in s
 
 
 def test_is_champ_select_marker():
