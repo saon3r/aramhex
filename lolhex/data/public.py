@@ -26,11 +26,16 @@ from pathlib import Path
 
 import requests
 
-from .. import DATA_REPO, MIRROR, cloud
+from .. import DATA_REPO, MIRROR, __version__
 from . import http
 from .store import DataStore, _read
 
 log = logging.getLogger(__name__)
+
+
+def headers() -> dict[str, str]:
+    """统计数据请求的匿名请求头：只有版本号，没有安装编号、Cookie 或账号信息。"""
+    return {"User-Agent": f"aramhex/{__version__}"}
 
 # 1.1.1 起只分三档（数据里 high、top 早就合成了「前 5%」，bands/top 和 bands/high 内容相同）
 BANDS = {"casual": "娱乐", "mid": "中分", "high": "前 5%"}
@@ -237,7 +242,7 @@ def download(base_url: str, manifest: dict, dest: Path, timeout: float = 30, pro
             progress(done[0], total)
     files = None
     try:
-        files = unpack(http.fetch(f"{base_url}/{path}.pack.xz", timeout=timeout, headers=cloud.headers(base_url + "/"),
+        files = unpack(http.fetch(f"{base_url}/{path}.pack.xz", timeout=timeout, headers=headers(),
                                   on_bytes=lambda n: progress and progress(0, 0)))
         log.info("统计数据用压缩包下载：%s", base_url)
     except Exception as e:
@@ -249,7 +254,7 @@ def download(base_url: str, manifest: dict, dest: Path, timeout: float = 30, pro
                 if files:
                     log.info("压缩包里的 %s 对不上，改为逐个文件下载", name)
                     files = None
-                body = http.fetch(f"{base_url}/{path}/{name}", timeout=timeout, headers=cloud.headers(base_url + "/"),
+                body = http.fetch(f"{base_url}/{path}/{name}", timeout=timeout, headers=headers(),
                                   on_bytes=on_bytes)
             if hashlib.sha256(body).hexdigest() != f["sha256"] or ("size" in f and len(body) != f["size"]):
                 raise DatasetError(f"{name} 校验不对（下载不完整或文件被改过）")
@@ -272,21 +277,13 @@ def download(base_url: str, manifest: dict, dest: Path, timeout: float = 30, pro
 class PublicStore(DataStore):
     def __init__(self, root: Path, refresh_hours: float = 6.0, bundled: Path | None = None,
                  check_updates: bool = True, base_url: str | list[str] | None = None,
-                 tag_hosts=None, tag_fmt: str = DATA_TAG_FMT, event_source=None):
+                 tag_hosts=None, tag_fmt: str = DATA_TAG_FMT):
         super().__init__(root, refresh_hours)
         self.bundled = Path(bundled or BUNDLED_DIR)
         self.downloaded = self.root / "public"
-        self.event_dir = self.root / "public-event"  # 活动规则的数据（首次必棱彩等）
-        self.event: dict | None = None               # 正在进行的活动 {mode, label}（云控）
-        self.event_fallback = False                  # 有活动但还没有活动数据：先用常规
-        if event_source is None:
-            from .. import cloud
-            event_source = cloud.event if base_url is None else (lambda: None)
-        self._event_source = event_source
         self.check_updates = check_updates
         if base_url is None:
-            from .. import cloud
-            urls = [u.rstrip("/") for u in cloud.mirrors("data")] + DATA_SOURCES
+            urls = DATA_SOURCES
         else:
             urls = [base_url] if isinstance(base_url, str) else base_url
         self.base_urls = [u.rstrip("/") for u in urls]
@@ -299,7 +296,7 @@ class PublicStore(DataStore):
         self.data_updated_at: float | None = None
         self.sync_error: str | None = None
         self.sync_progress: dict | None = None  # 下载统计数据时 {done, total}（字节）
-        self.sync_every_s = SYNC_EVERY_S  # 多久查一次数据仓库；引擎按云控 update.data_minutes 改
+        self.sync_every_s = SYNC_EVERY_S  # 多久查一次数据仓库；引擎用固定的本地间隔改
         self.hold = lambda: False  # 返回 True 时（正在对局）不在后台换数据，打完再换，一局里推荐前后一致
         self.data_note: dict | None = None   # 后台换了新数据：{id, text}，界面在游戏外提示一次
         self.data_offer: dict | None = None  # 关了自动更新、发现有新数据：{id, text}，界面在游戏外问一次
@@ -311,15 +308,8 @@ class PublicStore(DataStore):
     # ---------- 数据集 ----------
 
     def reload_dataset(self) -> bool:
-        """重新挑选数据；换了一份返回 True。有活动且有活动数据时用活动的，否则用常规的。"""
+        """重新挑选数据；换了一份返回 True。"""
         ds = load_best([(self.downloaded, "downloaded"), (self.bundled, "bundled")])
-        self.event_fallback = False
-        if self.event:
-            ev = load_best([(self.event_dir, "downloaded")])
-            if ev is not None and ev.mode == self.event["mode"]:
-                ds = ev
-            else:
-                self.event_fallback = True
         with self._lock:
             changed = ds is not None and (self.dataset is None or ds.revision != self.dataset.revision)
             if changed or ds is None:
@@ -330,7 +320,7 @@ class PublicStore(DataStore):
 
     def sync_data(self, force: bool = False, manual: bool = False) -> bool:
         """查数据仓库有没有更新的统计数据，有就下载并换上。下载了新数据返回 True。
-        manual=True：用户点了「检查更新」或同意了更新提示，关了自动更新、正在对局也查。
+        manual=True：用户同意了统计数据更新提示，关了自动更新、正在对局也查。
         后台查时：正在对局就先不查（打完再查）；关了自动更新只看有没有新的，有就记到 data_offer 等用户点头。"""
         if not manual and self.hold():
             log.debug("对局中，统计数据更新推迟到打完")
@@ -344,10 +334,6 @@ class PublicStore(DataStore):
             if not self.check_updates and not manual:
                 self._look_for_offer()
                 return False
-            event = self._event_source()
-            if event != self.event:
-                self.event = event
-                self.reload_dataset()
             errors, tried_tags = [], False
             for base in self.base_urls:  # 一个地址连不上、或下载的文件校验不过，就换下一个
                 if not tried_tags and self.tag_hosts and base != self.base_urls[0]:
@@ -367,11 +353,6 @@ class PublicStore(DataStore):
                     log.info("从 %s 检查统计数据更新失败：%s", base, e)
                     continue
                 self.data_source, self.sync_error = base, None
-                if self.event:
-                    try:
-                        changed = self._sync_event(base) or changed
-                    except Exception as e:
-                        log.info("活动数据下载失败：%s", e)
                 return changed
             # 都连不上很常见：用手头的数据，不打扰用户
             self.sync_error = "；".join(errors)[:300]
@@ -387,7 +368,7 @@ class PublicStore(DataStore):
             for _ in range(steps):
                 base = self.tag_fmt.format(host=host, seq=k)
                 try:
-                    r = requests.get(f"{base}/latest.json", headers=cloud.headers(base + "/"), timeout=15)
+                    r = requests.get(f"{base}/latest.json", headers=headers(), timeout=15)
                 except requests.RequestException:
                     break
                 answered = True
@@ -422,7 +403,7 @@ class PublicStore(DataStore):
         """关了自动更新时：只读清单，看看有没有更新的数据（不下载）。连不上就算了，下次再看。"""
         for base in self.base_urls:
             try:
-                r = requests.get(f"{base}/latest.json", headers=cloud.headers(base + "/"), timeout=15)
+                r = requests.get(f"{base}/latest.json", headers=headers(), timeout=15)
                 r.raise_for_status()
                 remote = check_manifest(r.json())
             except Exception as e:
@@ -435,7 +416,7 @@ class PublicStore(DataStore):
             return
 
     def _sync_from(self, base: str) -> bool:
-        r = requests.get(f"{base}/latest.json", headers=cloud.headers(base + "/"), timeout=15)
+        r = requests.get(f"{base}/latest.json", headers=headers(), timeout=15)
         r.raise_for_status()
         remote = check_manifest(r.json())
         if not self._newer(remote):
@@ -453,24 +434,6 @@ class PublicStore(DataStore):
             self.data_note = {"id": self.dataset.revision, "text": "数据已更新：" + self._describe(remote)}
             return True
         return False
-
-    def _sync_event(self, base: str) -> bool:
-        """活动期间：从数据仓库的 index.json 找同一规则最新的一份，下载到 public-event/。"""
-        r = requests.get(f"{base}/index.json", headers=cloud.headers(base + "/"), timeout=15)
-        r.raise_for_status()
-        idx = r.json()
-        cands = [dict(d, schema_version=d.get("schema_version", idx.get("schema_version")))
-                 for d in idx.get("datasets") or [] if d.get("mode") == self.event["mode"]]
-        if not cands:
-            return False
-        remote = max(cands, key=lambda d: (str(d.get("snapshot_at") or ""), str(d.get("patch") or "")))
-        cur = load_best([(self.event_dir, "downloaded")])
-        if cur and cur.mode == self.event["mode"] and \
-                (str(remote.get("snapshot_at") or ""), str(remote.get("patch") or "")) <= (cur.snapshot_at, cur.patch):
-            return False
-        log.info("下载活动数据：%s %s", self.event["label"], remote.get("patch"))
-        download(base, remote, self.event_dir)
-        return self.reload_dataset()
 
     def refresh(self, force: bool = False) -> None:
         super().refresh(force)
@@ -648,7 +611,6 @@ class PublicStore(DataStore):
                  band=self.band, band_effective=self.effective_band(),
                  dataset_mode=ds.mode if ds else None,
                  dataset_mode_label=(ds.mode_label or ds.mode) if ds and ds.mode != "normal" else None,
-                 event_label=(self.event or {}).get("label"), event_fallback=self.event_fallback,
                  data_updated_at=self.data_updated_at, sync_error=self.sync_error,
                  data_progress=self.sync_progress, data_note=self.data_note, data_offer=self.data_offer)
         return s

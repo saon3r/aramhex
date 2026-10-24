@@ -173,6 +173,10 @@ Comments and docstrings are Chinese and are the real documentation — keep them
 - **`git checkout <branch> -- <file>` stages the file.** When an uncommitted carry is the
   point (e.g. bringing a later `main` doc onto a milestone branch), use
   `git restore --source=<branch> --worktree -- <file>` instead.
+- **Deleted modules can still have non-Python callers.** Check release workflows and
+  packaging scripts too; the release workflow used to invoke `python -m lolhex.patch`.
+- **Retired settings can hide in `Settings.extra`.** Add keys written there (such as
+  `logs_sent`) to `REMOVED`, not just the deleted dataclass fields.
 
 ## How we work
 

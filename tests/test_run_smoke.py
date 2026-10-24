@@ -10,10 +10,9 @@ def test_run_starts(tmp_path, monkeypatch):
 
     from lolhex.config import Settings
     from lolhex.engine import Engine
-    from lolhex.ui import mainwindow, overlay
+    from lolhex.ui import overlay
 
     monkeypatch.setattr(QApplication, "exec", lambda self: 0)
-    monkeypatch.setattr(mainwindow.MainWindow, "check_update", lambda self, manual=False: None)
     monkeypatch.setattr(Engine, "start", lambda self: None)
     s = Settings.load(tmp_path / "config.json")
     s.check_data_updates = False

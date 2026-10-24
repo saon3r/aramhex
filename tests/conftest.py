@@ -100,25 +100,6 @@ def store(tmp_path, no_network):
 
 
 @pytest.fixture(autouse=True)
-def _no_site(monkeypatch, request):
-    """测试不连真的官网镜像；要测镜像的用例自己给地址（标记 site）。"""
-    if "site" in request.keywords:
-        return
-    from lolhex import update
-
-    def offline(*a, **k):
-        raise update.requests.ConnectionError("测试不连官网")
-    monkeypatch.setattr(update, "check_site", offline)
-
-
-def pytest_configure(config):
-    config.addinivalue_line("markers", "site: 允许连（假的）官网镜像")
-
-
-@pytest.fixture(autouse=True)
 def _isolated_home(monkeypatch, tmp_path):
-    """每个测试用自己的临时数据目录和空的云控缓存，不读开发机上真的 cloud.json / config.json。
-    要固定目录的用例自己再 setenv 覆盖。"""
-    from lolhex import cloud
+    """每个测试用自己的临时数据目录，不读开发机上真的 config.json。"""
     monkeypatch.setenv("ARAMHEX_HOME", str(tmp_path / "_home"))
-    monkeypatch.setattr(cloud, "_cache", None)

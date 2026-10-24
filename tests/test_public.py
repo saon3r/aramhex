@@ -261,33 +261,6 @@ def test_bad_pack_falls_back_to_files(tmp_path, server):
     assert s.sync_data(force=True) is True and s.dataset.patch == "16.21"
 
 
-def test_event_mode_uses_event_dataset(tmp_path, server):
-    root, base = server
-    make_dataset(tmp_path / "b", snapshot_at="2026-10-13T00:00:00+08:00")
-    m = _publish(root, "2026-10-13T00:00:00+08:00")
-    ev_folder = root / "patches" / "16.20-fp"
-    ev = make_dataset(ev_folder, snapshot_at="2026-10-15T00:00:00+08:00", bands=False)
-    (ev_folder / "latest.json").unlink()
-    ev.update(mode="first-prismatic", mode_label="首次必棱彩", path="patches/16.20-fp")
-    (root / "index.json").write_text(json.dumps({"schema_version": 1, "datasets": [m, ev]}), encoding="utf-8")
-    event = [None]
-    s = PublicStore(tmp_path / "data", bundled=tmp_path / "b", base_url=base, event_source=lambda: event[0])
-    assert s.sync_data(force=True) is False and s.dataset.mode == "normal"
-    event[0] = {"mode": "first-prismatic", "label": "首次必棱彩"}
-    assert s.sync_data(force=True) is True and s.dataset.mode == "first-prismatic"
-    st = s.status()
-    assert st["dataset_mode_label"] == "首次必棱彩" and not st["event_fallback"]
-    event[0] = {"mode": "gold-reroll", "label": "金色刷新"}  # 活动数据还没出：先用常规并提示
-    s.sync_data(force=True)
-    st = s.status()
-    assert s.dataset.mode == "normal" and st["event_fallback"] and st["event_label"] == "金色刷新"
-    from lolhex.ui.data_status import data_status_html
-    assert "金色刷新的数据还没出" in data_status_html(st)
-    event[0] = None  # 活动结束：回到常规
-    s.sync_data(force=True)
-    assert s.dataset.mode == "normal" and not s.status()["event_fallback"]
-
-
 def test_old_top_band_setting_becomes_high(tmp_path):
     # 1.1.1 去掉「顶尖」：老设置文件 data_band=top 读成 high
     import json

@@ -19,10 +19,9 @@ from PySide6.QtGui import QColor, QCursor, QFont, QFontMetrics, QGuiApplication,
 from PySide6.QtWidgets import (QApplication, QHBoxLayout, QLabel, QLineEdit, QPushButton,
                                QVBoxLayout, QWidget)
 
-from .. import cloud, recommend
+from .. import recommend
 from ..recommend import NODATA_NOTE
 from ..vision import window as win
-from .. import patch
 from . import buildview, single_instance
 from .autoshot import AutoShot
 
@@ -38,6 +37,11 @@ VERDICT = {"best": ("首选", QColor(95, 211, 141)), "ok": ("可选", QColor(98,
 
 
 AUTO_HIDE_SECONDS = 5
+# 大厅里助手图标的位置（客户端 1280×720 下的像素，按窗口高度等比例）：图标中心离右边、离上边，直径。
+# 以前从云控读，现在固定成本地常量（默认值就是原云控默认值）。
+CLIENT_BADGE_RIGHT = 60
+CLIENT_BADGE_TOP = 53
+CLIENT_BADGE_SIZE = 26
 
 
 def _dpr() -> float:
@@ -444,16 +448,9 @@ class ChampSelectLayer(_Layer):
 def client_badge(rect) -> tuple[int, int, int]:
     """客户端窗口（物理像素）→ 大厅图标的中心 x、y 和直径（物理像素）。
     客户端界面按窗口大小整体缩放，所以用 1280×720 下量的位置乘以「窗口高度 / 720」。"""
-    ui = cloud.get().get("ui") or {}
-
-    def num(key, default, lo, hi):
-        v = ui.get(key, default)
-        return v if isinstance(v, (int, float)) and lo <= v <= hi else default
     s = rect.height / 720
-    right = num("client_badge_right", 60, 10, 400)
-    top = num("client_badge_top", 53, 10, 300)
-    size = num("client_badge_size", 26, 16, 60)
-    return round(rect.right - right * s), round(rect.top + top * s), round(size * s)
+    return (round(rect.right - CLIENT_BADGE_RIGHT * s), round(rect.top + CLIENT_BADGE_TOP * s),
+            round(CLIENT_BADGE_SIZE * s))
 
 
 class ControlPanel(QWidget):
@@ -959,7 +956,6 @@ def run(make_engine, minimized: bool = False) -> int:
         if conn:
             conn.readAll()
         main_win.show_and_raise()
-        main_win.check_update()  # 用户再点一次图标：顺便查更新，不用退出重开
 
     server.newConnection.connect(on_second_instance)
     note = version_notice(engine.settings)
@@ -974,13 +970,6 @@ def run(make_engine, minimized: bool = False) -> int:
             QMessageBox.information(main_win, "使用前", "请在游戏内设置-窗口模式中选择无边框/窗口。\n\n"
                                     "全屏模式下截不到画面，识别不了。")
         QTimer.singleShot(1200, welcome)
-    failed = patch.take_failure()
-    if failed:
-        log.warning("上次更新没装上：%s", failed)
-        tray.showMessage("海克斯大乱斗助手", "上次更新没有装上，已恢复原版本。打开主界面点「立即更新」再试一次。",
-                         app_icon(), 10000)
-    main_win.check_update()
-    main_win.refresh_rank_if_stale()
     if not minimized:
         main_win.show_and_raise()
     app._keep = (ov, main_win, tray, server)  # 保持引用
