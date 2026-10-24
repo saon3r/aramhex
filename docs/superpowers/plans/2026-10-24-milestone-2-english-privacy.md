@@ -114,7 +114,7 @@
 
 ## Task 4 — Static metadata, bounded network and offline seeding
 
-**Transport subtask complete:** `9cdc9e5`, controller suite **376 passed**, independent security/spec review clear. Real shipped-manifest routes are covered on both stats hosts; default requests cannot inherit proxy/netrc credentials, change the stable User-Agent, send a Referer or follow redirects. Static source/cache/offline integration is the next subtask; old Tencent/Chinese-locale requests are currently denied, not silently allowed pending migration.
+**Complete:** Transport in `9cdc9e5`, source/cache integration and recovery fixes in `42b9276`. Final controller suite **508 passed**. Real ordinary refresh and cold/warm offline starts passed; no Tencent runtime callers remain. See the milestone verification document for observed hosts, cache counts and dataset hashes. No frozen-executable build is claimed.
 
 **Files:** new `data/metadata.py`; `data/http.py`, `data/store.py`, `data/public.py`, `data/icons.py`, `engine.py`, `config.py`, callers; delete remaining `data/tencent.py` once no imports survive. New `tests/test_network_policy.py`, `tests/test_data_cache.py`; extend parser/store tests and AGENTS.md.
 
@@ -158,6 +158,8 @@
 - [ ] Worker runs the helper/pilot tests only. The controller runs the gates and reviews stat/hunks, catalog shape, completeness of the extracted key set, escaping and resource loading, then accepts the pilot on its own review — the pilot is self-reviewed by the architect, not approved by the owner. No other UI conversion starts until that acceptance, and after it the catalog is **frozen**: no later task writes it.
 
 ## Task 7 — Code-only waves, one UI module per worker, catalog frozen
+
+**Complete:** Both four-worker waves reviewed by the controller; UI conversions landed in `03f7a5c` and `9066d1d`. All UI AST gates are green. No catalog amendment or DPI quarantine was needed. Pentakill placeholder collision fixed with a regression in `0e543d9`; real fixture-to-badge acceptance landed in `ab7d954`.
 
 **Files:** each worker owns exactly one of `ui/badgepos.py`, `herosearch.py`, `buildview.py`, `autoshot.py`, `overlay.py`, `mainwindow.py`, plus its own disjoint tests. `data_status.py` is already converted. All share the Task 6 helper contract and the frozen catalog; nobody writes `messages.json`.
 

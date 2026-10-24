@@ -56,8 +56,11 @@ a failed or malformed refresh keeps the last valid cache and the bundled fallbac
   lookup, self-update/patching, Korean OCR model download, Tencent static metadata
   (`game.gtimg.cn`, `mlol.qt.qq.com`) and the old fixed jsDelivr stats mirrors have been
   removed. Static metadata now comes from Data Dragon and CommunityDragon as listed above.
-- Offline and network-blocked startup have **not** yet been verified in a real application
-  run; that acceptance remains open in Task 9. Automated offline tests do not replace it.
+- Ordinary background refresh and both warm-cache and fresh bundled-only startup have
+  been verified through the real application entry point, including network-denied runs.
+  Details and remaining live-game checks are recorded in
+  `docs/superpowers/verification/2026-10-24-milestone-2.md`. This is not a claim that a
+  frozen executable has been built or that live bench/game acceptance has passed.
 
 ## Attribution and licence boundaries
 

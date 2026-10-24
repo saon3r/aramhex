@@ -100,7 +100,10 @@ Fanning out is allowed; shared state is not.
 - **Milestone 1 — verified.** Upstream runs unmodified on this client. The augment screen
   is proven against `tests/fixtures/real-mayhem-augment-screen.png`; the app launches.
   *Still unchecked:* champion select, which needs a live client in a queue.
-- **Next:** milestone 2 — English UI and telemetry removal (issue #3).
+- **Milestone 2 — in progress (issue #3).** English UI/catalog gates and the full suite
+  pass (508 tests). Real ordinary refresh, cold/warm offline startup, fixture OCR and
+  three badges are verified. **Still open:** live bench recognition and a full game.
+  Evidence: `docs/superpowers/verification/2026-10-24-milestone-2.md`.
 
 ## Environment (already set up on this machine)
 
