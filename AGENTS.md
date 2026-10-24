@@ -12,6 +12,33 @@ integration. Built for one player on EUW with an `en_GB` client.
 Read the design doc before proposing anything. It records what was measured, what was
 rejected and why. Most "obvious improvements" were already considered there.
 
+## Who does what — read this twice
+
+**The owner is not a programmer. Treat them as the client, not as a pair.**
+
+The agent does every technical thing: reading code, editing, running commands and tests,
+git, GitHub (branches, pull requests, merges, issue comments), environment setup,
+verification, and documentation. Never ask the owner to run a command, read a diff,
+interpret output, click through a GUI, or judge code quality.
+
+Code review is the agent's job. For a second opinion, dispatch a reviewer subagent with
+fresh context. Never ask the owner to review a diff.
+
+The owner does exactly two things:
+
+1. **Plays a game when asked**, for live acceptance. They interpret nothing. The agent
+   launches and manages the app, and afterwards reads the logs, screenshots and scan
+   output itself.
+2. **Answers questions of preference.** Ask in plain language, give a recommendation, and
+   say what each option costs. Never ask them to choose between technical alternatives —
+   make that call yourself and record it.
+
+If a step seems to need the owner, first ask whether it can be automated or verified
+another way. It usually can.
+
+The owner may ask to be walked through GitHub for learning. That is optional and never a
+dependency — do the work either way.
+
 ## Current status
 
 - **Milestone 1 — verified.** Upstream runs unmodified on this client. The augment screen
