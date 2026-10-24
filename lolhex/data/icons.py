@@ -19,8 +19,9 @@ MAX_AGE_S = 14 * 86400  # 图标很少变；两周后顺手重下一次，跟上
 
 
 class IconCache:
-    def __init__(self, folder: Path, workers: int = 4):
+    def __init__(self, folder: Path, workers: int = 4, transport=None):
         self.folder = folder
+        self.transport = transport
         self.version = 0
         self._pending: set[str] = set()
         self._failed: dict[str, float] = {}
@@ -49,12 +50,12 @@ class IconCache:
         try:
             if url.startswith("//"):
                 url = "https:" + url
-            r = http._session.get(url, timeout=15)
-            if r.status_code != 200 or not r.content.startswith(b"\x89PNG"):
-                raise ValueError(f"HTTP {r.status_code}")
+            body = http.fetch(url, timeout=15, transport=self.transport)
+            if not body.startswith(b"\x89PNG"):
+                raise ValueError("返回的不是 PNG")
             path.parent.mkdir(parents=True, exist_ok=True)
             tmp = path.with_suffix(".tmp")
-            tmp.write_bytes(r.content)
+            tmp.write_bytes(body)
             tmp.replace(path)
             with self._lock:
                 self.version += 1

@@ -196,7 +196,7 @@ def client_icons(path: Path = CLIENT_ICONS) -> dict[str, np.ndarray]:
         return {}
 
 
-def ensure_icons(folder: Path, heroes: dict[str, dict]) -> int:
+def ensure_icons(folder: Path, heroes: dict[str, dict], transport=None) -> int:
     """下载缺少的英雄头像（内置里已有的不下），返回新下载的数量。失败的下次再试。"""
     from ..data import http
     folder.mkdir(parents=True, exist_ok=True)
@@ -210,7 +210,7 @@ def ensure_icons(folder: Path, heroes: dict[str, dict]) -> int:
         if p.exists() and p.stat().st_size > 0:
             continue
         try:
-            p.write_bytes(http.get(url, timeout=15, retries=1).content)
+            p.write_bytes(http.get(url, timeout=15, retries=1, transport=transport).content)
             n += 1
         except Exception as e:  # noqa: BLE001
             log.warning("头像下载失败 %s：%s", alias, e)

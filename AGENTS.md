@@ -177,6 +177,9 @@ Comments and docstrings are Chinese and are the real documentation — keep them
   packaging scripts too; the release workflow used to invoke `python -m lolhex.patch`.
 - **Retired settings can hide in `Settings.extra`.** Add keys written there (such as
   `logs_sent`) to `REMOVED`, not just the deleted dataclass fields.
+- **Policy tests must use the shipped manifest's paths.** Stats live under
+  `patches/<patch>/normal` (including `normal.pack.xz`); mode-less test-server paths
+  once hid a policy that blocked every real stats payload despite a green suite.
 
 ## How we work
 

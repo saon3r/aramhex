@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import importlib.util
+import hashlib
 import json
 import threading
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
@@ -11,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from conftest import make_dataset
+from httpfixtures import LocalTransport
 from lolhex import __version__, config
 from lolhex.config import Settings
 
@@ -87,7 +89,7 @@ def test_game_lang_defaults_to_english_recognition(tmp_path):
 
 
 def _publish(root: Path, snapshot_at: str, patch: str = "16.20") -> dict:
-    folder = root / "patches" / patch
+    folder = root / "patches" / patch / "normal"
     manifest = make_dataset(folder, snapshot_at=snapshot_at, patch=patch)
     (folder / "latest.json").unlink()
     (root / "latest.json").write_text(json.dumps(manifest), encoding="utf-8")
@@ -117,21 +119,90 @@ def recording_server(tmp_path):
     httpd.shutdown()
 
 
+def _assert_anonymous(seen: list[dict]) -> None:
+    """统计数据的所有请求只带版本号 User-Agent：没有安装编号、Cookie、账号或来源头。"""
+    assert seen
+    for req in seen:
+        assert req["headers"].get("user-agent") == f"aramhex/{__version__}"
+        for name in ("cookie", "authorization", "proxy-authorization", "referer", "x-aramhex-id"):
+            assert name not in req["headers"], name
+
+
 def test_stats_download_requests_carry_no_identity(recording_server, tmp_path):
-    from lolhex.data import public
     from lolhex.data.public import PublicStore
 
     root, base, seen = recording_server
     make_dataset(tmp_path / "b", snapshot_at="2026-10-13T00:00:00+08:00")
     _publish(root, "2026-10-20T00:00:00+08:00", patch="16.21")
-    s = PublicStore(tmp_path / "data", bundled=tmp_path / "b", base_url=base)
+    s = PublicStore(tmp_path / "data", bundled=tmp_path / "b", base_url=base,
+                    transport=LocalTransport(base))
     assert s.sync_data(force=True) is True and s.dataset.patch == "16.21"
-    assert seen and any(x["path"] == "/latest.json" for x in seen)
-    for req in seen:
-        assert req["headers"]["user-agent"] == f"aramhex/{__version__}"
-        assert "x-aramhex-id" not in req["headers"]
-        assert "cookie" not in req["headers"]
-        assert "authorization" not in req["headers"]
+    paths = [x["path"] for x in seen]
+    assert "/latest.json" in paths and "/patches/16.21/normal/heroes.json" in paths  # 清单 + 逐个文件
+    _assert_anonymous(seen)
+
+
+def _make_pack(root: Path, patch: str = "16.21") -> bytes:
+    """把发布目录按导出写法归一化后压成 pack，和 unpack 逐字节一致。"""
+    from lolhex.data import public
+
+    folder = root / "patches" / patch / "normal"
+    manifest = json.loads((root / "latest.json").read_text(encoding="utf-8"))
+    for name in manifest["files"]:
+        obj = json.loads((folder / name).read_text(encoding="utf-8"))
+        if name.endswith("hero_augments.json"):
+            for d in obj.values():
+                for s in d.values():
+                    s["win_rate"] = round(s["wins"] / s["games"], 6) if s["games"] else 0.0
+                    s["low_sample"] = bool(s.get("low_sample"))
+        body = public._dump_json(obj)
+        (folder / name).write_bytes(body)
+        manifest["files"][name] = {"sha256": hashlib.sha256(body).hexdigest(), "size": len(body)}
+    (root / "latest.json").write_text(json.dumps(manifest), encoding="utf-8")
+    pack = public.make_pack(folder, manifest)
+    (root / "patches" / patch / "normal.pack.xz").write_bytes(pack)
+    return pack
+
+
+def test_stats_pack_request_carries_no_identity(recording_server, tmp_path):
+    from lolhex.data.public import PublicStore
+
+    root, base, seen = recording_server
+    make_dataset(tmp_path / "b", snapshot_at="2026-10-13T00:00:00+08:00")
+    _publish(root, "2026-10-20T00:00:00+08:00", patch="16.21")
+    _make_pack(root)
+    s = PublicStore(tmp_path / "data", bundled=tmp_path / "b", base_url=base,
+                    transport=LocalTransport(base))
+    assert s.sync_data(force=True) is True and s.dataset.patch == "16.21"
+    assert any(x["path"].endswith(".pack.xz") for x in seen)
+    _assert_anonymous(seen)
+
+
+def test_stats_per_file_fallback_carries_no_identity(recording_server, tmp_path):
+    from lolhex.data.public import PublicStore
+
+    root, base, seen = recording_server
+    make_dataset(tmp_path / "b", snapshot_at="2026-10-13T00:00:00+08:00")
+    _publish(root, "2026-10-20T00:00:00+08:00", patch="16.21")
+    (root / "patches" / "16.21" / "normal.pack.xz").write_bytes(b"not xz")
+    s = PublicStore(tmp_path / "data", bundled=tmp_path / "b", base_url=base,
+                    transport=LocalTransport(base))
+    assert s.sync_data(force=True) is True and s.dataset.patch == "16.21"
+    assert any(x["path"] == "/patches/16.21/normal/hero_augments.json" for x in seen)
+    _assert_anonymous(seen)
+
+
+def test_stats_offer_request_carries_no_identity(recording_server, tmp_path):
+    from lolhex.data.public import PublicStore
+
+    root, base, seen = recording_server
+    make_dataset(tmp_path / "b", snapshot_at="2026-10-13T00:00:00+08:00")
+    _publish(root, "2026-10-20T00:00:00+08:00", patch="16.21")
+    s = PublicStore(tmp_path / "data", bundled=tmp_path / "b", base_url=base,
+                    check_updates=False, transport=LocalTransport(base))
+    assert s.sync_data(force=True) is False
+    assert [x["path"] for x in seen] == ["/latest.json"]
+    _assert_anonymous(seen)
 
 
 def test_public_store_has_no_cloud_event_configuration():

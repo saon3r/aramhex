@@ -51,7 +51,7 @@ def make_dataset(folder: Path, snapshot_at="2026-10-13T11:56:47+08:00", patch="1
             files[f"bands/{b}/heroes.json"] = {"17": _hero(1000 * (4 - i), int(1000 * (4 - i) * (0.50 + 0.02 * i))),
                                                "1": _hero(1000, 500)}
             files[f"bands/{b}/hero_augments.json"] = {"17": {"1029": _aug(500, 0.50 + 0.03 * i)}}
-    manifest = {"schema_version": 1, "patch": patch, "path": f"patches/{patch}", "snapshot_at": snapshot_at,
+    manifest = {"schema_version": 1, "patch": patch, "path": f"patches/{patch}/normal", "snapshot_at": snapshot_at,
                 "window": files["meta.json"]["window"], "matches": 70000, "bands": bands, "files": {}, "seq": seq}
     for name, obj in files.items():
         body = json.dumps(obj, ensure_ascii=False).encode("utf-8")
@@ -63,13 +63,24 @@ def make_dataset(folder: Path, snapshot_at="2026-10-13T11:56:47+08:00", patch="1
     return manifest
 
 
+class _NoNetworkTransport:
+    """兜底：任何没显式注入本地传输的联网请求都在发出前失败。"""
+
+    def get(self, *a, **k):
+        raise AssertionError("测试中不应联网")
+
+    def fetch(self, *a, **k):
+        raise AssertionError("测试中不应联网")
+
+
 @pytest.fixture
 def no_network(monkeypatch):
     def boom(*a, **k):
         raise AssertionError("测试中不应联网")
     monkeypatch.setattr("lolhex.data.http.get", boom)
-    monkeypatch.setattr("lolhex.data.http.head_ok", boom)
+    monkeypatch.setattr("lolhex.data.http.DEFAULT_TRANSPORT", _NoNetworkTransport())
     monkeypatch.setattr("requests.get", boom)
+    monkeypatch.setattr("requests.sessions.Session.send", boom)
 
 
 @pytest.fixture

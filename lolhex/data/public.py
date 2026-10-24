@@ -9,7 +9,7 @@
 两个来源，用样本更新的那份：
 - 安装包内置：lolhex/data/bundled/（发版时由 scripts/update_data.py 放进来）；
 - 下载的：<app_home>/data/public/（启动时查数据仓库的 latest.json，有新数据就下载，逐个文件校验 SHA-256）。
-  先试 GitHub，连不上或校验不过就换 jsDelivr 镜像（DATA_SOURCES）。
+  先试 aramhex.com 镜像，连不上或校验不过再用 raw.githubusercontent.com 兜底（DATA_SOURCES）。
 
 静态资料（英雄、海克斯字典、装备）仍由父类 DataStore 取；单英雄出装、加点、官方层级已移除，
 hero() 只返回自采统计口径的数据。
@@ -25,9 +25,7 @@ import threading
 import time
 from pathlib import Path
 
-import requests
-
-from .. import DATA_REPO, MIRROR, __version__
+from .. import DATA_REPO, MIRROR
 from . import http
 from .store import DataStore, _read
 
@@ -36,7 +34,7 @@ log = logging.getLogger(__name__)
 
 def headers() -> dict[str, str]:
     """统计数据请求的匿名请求头：只有版本号，没有安装编号、Cookie 或账号信息。"""
-    return {"User-Agent": f"aramhex/{__version__}"}
+    return {"User-Agent": http.APP_UA}
 
 # 1.1.1 起只分三档（数据里 high、top 早就合成了「前 5%」，bands/top 和 bands/high 内容相同）
 BANDS = {"casual": "娱乐", "mid": "中分", "high": "前 5%"}
@@ -47,12 +45,8 @@ def norm_band(band):
     return BAND_ALIASES.get(band, band) if band else band
 BUNDLED_DIR = Path(__file__).with_name("bundled")
 RAW_BASE = f"https://raw.githubusercontent.com/{DATA_REPO}/main"
-# 先走官网镜像（DMIT 定时从 GitHub 同步），不通再试 GitHub 和 jsDelivr。每个文件都按清单校验 SHA-256。
-DATA_SOURCES = [f"{MIRROR}/data", RAW_BASE] + [f"https://{host}/gh/{DATA_REPO}@main"
-                             for host in ("fastly.jsdelivr.net", "gcore.jsdelivr.net", "cdn.jsdelivr.net")]
-# jsDelivr 按分支（@main）取会缓存好几个小时；数据每更新一次打 tag data-v<序号>，按"下一个序号"试探，按 tag 取是即时的
-DATA_TAG_HOSTS = ("fastly.jsdelivr.net", "gcore.jsdelivr.net")
-DATA_TAG_FMT = "https://{host}/gh/" + DATA_REPO + "@data-v{seq}"
+# 先走官网镜像（DMIT 定时从 GitHub 同步），不通再用 raw GitHub。每个文件都按清单校验 SHA-256。
+DATA_SOURCES = [f"{MIRROR}/data", RAW_BASE]
 SYNC_EVERY_S = 6 * 3600
 SCHEMA_VERSION = 1
 
@@ -100,7 +94,7 @@ class Dataset:
         self.meta = _read(self.folder / "meta.json") or {}
         self.patch = str(self.manifest.get("patch") or self.meta.get("patch") or "")
         self.snapshot_at = str(self.manifest.get("snapshot_at") or "")
-        self.seq = int(self.manifest.get("seq") or 0)  # 数据更新序号，对应 tag data-v<seq>
+        self.seq = int(self.manifest.get("seq") or 0)  # 数据更新序号
         self.mode = str(self.manifest.get("mode") or "normal")       # normal / first-prismatic 等
         self.mode_label = str(self.manifest.get("mode_label") or "")
         # 数据版本号：整份清单（全部文件的 SHA-256 + 样本时间）的摘要，任何一个文件变了都会变
@@ -224,7 +218,8 @@ def unpack(blob: bytes) -> dict[str, bytes]:
     return out
 
 
-def download(base_url: str, manifest: dict, dest: Path, timeout: float = 30, progress=None) -> None:
+def download(base_url: str, manifest: dict, dest: Path, timeout: float = 30, progress=None, *,
+             transport=None) -> None:
     """按清单下载一份数据到 dest（先写到旁边的临时目录，全部校验通过才换上）。progress(已下载字节, 总字节)。
     先试官网镜像上的压缩包（约小一半），还原后按清单逐个核对 SHA-256；没有或不对就逐个文件下载。"""
     check_manifest(manifest)
@@ -244,7 +239,8 @@ def download(base_url: str, manifest: dict, dest: Path, timeout: float = 30, pro
     files = None
     try:
         files = unpack(http.fetch(f"{base_url}/{path}.pack.xz", timeout=timeout, headers=headers(),
-                                  on_bytes=lambda n: progress and progress(0, 0)))
+                                  on_bytes=lambda n: progress and progress(0, 0),
+                                  transport=transport))
         log.info("统计数据用压缩包下载：%s", base_url)
     except Exception as e:
         log.debug("没有可用的压缩包（%s），逐个文件下载", e)
@@ -256,7 +252,7 @@ def download(base_url: str, manifest: dict, dest: Path, timeout: float = 30, pro
                     log.info("压缩包里的 %s 对不上，改为逐个文件下载", name)
                     files = None
                 body = http.fetch(f"{base_url}/{path}/{name}", timeout=timeout, headers=headers(),
-                                  on_bytes=on_bytes)
+                                  on_bytes=on_bytes, transport=transport)
             if hashlib.sha256(body).hexdigest() != f["sha256"] or ("size" in f and len(body) != f["size"]):
                 raise DatasetError(f"{name} 校验不对（下载不完整或文件被改过）")
             out = tmp / name
@@ -278,19 +274,18 @@ def download(base_url: str, manifest: dict, dest: Path, timeout: float = 30, pro
 class PublicStore(DataStore):
     def __init__(self, root: Path, refresh_hours: float = 6.0, bundled: Path | None = None,
                  check_updates: bool = True, base_url: str | list[str] | None = None,
-                 tag_hosts=None, tag_fmt: str = DATA_TAG_FMT):
+                 transport=None):
         super().__init__(root, refresh_hours)
         self.bundled = Path(bundled or BUNDLED_DIR)
         self.downloaded = self.root / "public"
         self.check_updates = check_updates
+        # 父类 DataStore 还不接受 transport；先赋在这里，下一步集成再传进去。
+        self.transport = transport
         if base_url is None:
             urls = DATA_SOURCES
         else:
             urls = [base_url] if isinstance(base_url, str) else base_url
         self.base_urls = [u.rstrip("/") for u in urls]
-        # 默认地址时才按 tag 试探（测试里给了地址就不去连真的 jsDelivr）
-        self.tag_hosts = tuple(DATA_TAG_HOSTS if tag_hosts is None and base_url is None else (tag_hosts or ()))
-        self.tag_fmt = tag_fmt
         self.data_source: str | None = None  # 上次成功取到清单的地址
         self.band: str | None = None
         self.dataset: Dataset | None = None
@@ -335,18 +330,8 @@ class PublicStore(DataStore):
             if not self.check_updates and not manual:
                 self._look_for_offer()
                 return False
-            errors, tried_tags = [], False
+            errors = []
             for base in self.base_urls:  # 一个地址连不上、或下载的文件校验不过，就换下一个
-                if not tried_tags and self.tag_hosts and base != self.base_urls[0]:
-                    tried_tags = True  # GitHub 连不上了：先按 tag 试探 jsDelivr 上更新的数据
-                    tag_base = self._probe_tag()
-                    if tag_base:
-                        try:
-                            changed = self._sync_from(tag_base)
-                            self.data_source, self.sync_error = tag_base, None
-                            return changed
-                        except Exception as e:
-                            errors.append(f"{tag_base.split('/')[2]}（tag）：{e}")
                 try:
                     changed = self._sync_from(base)
                 except Exception as e:
@@ -361,28 +346,11 @@ class PublicStore(DataStore):
         finally:
             self._sync_lock.release()
 
-    def _probe_tag(self, steps: int = 30) -> str | None:
-        """从当前数据的序号往后试 data-v<序号+1>、+2……，返回最新一份的地址；没有更新的返回 None。"""
-        seq = self.dataset.seq if self.dataset else 0
-        for host in self.tag_hosts:
-            best, k, answered = None, seq + 1, False
-            for _ in range(steps):
-                base = self.tag_fmt.format(host=host, seq=k)
-                try:
-                    r = requests.get(f"{base}/latest.json", headers=headers(), timeout=15)
-                except requests.RequestException:
-                    break
-                answered = True
-                try:
-                    ok = r.status_code == 200 and int(r.json().get("seq") or 0) == k
-                except ValueError:
-                    ok = False
-                if not ok:
-                    break
-                best, k = base, k + 1
-            if answered:
-                return best  # 这个节点答复了（有或没有更新），不用再问别的节点
-        return None
+    def _read_manifest(self, base: str) -> dict:
+        """读一份数据仓库的 latest.json（清单只读，不下载）。"""
+        remote = http.get_json(f"{base}/latest.json", headers=headers(), timeout=15,
+                               transport=self.transport)
+        return check_manifest(remote)
 
     def _newer(self, remote: dict) -> bool:
         cur = self.dataset
@@ -404,9 +372,7 @@ class PublicStore(DataStore):
         """关了自动更新时：只读清单，看看有没有更新的数据（不下载）。连不上就算了，下次再看。"""
         for base in self.base_urls:
             try:
-                r = requests.get(f"{base}/latest.json", headers=headers(), timeout=15)
-                r.raise_for_status()
-                remote = check_manifest(r.json())
+                remote = self._read_manifest(base)
             except Exception as e:
                 log.info("从 %s 查看统计数据失败：%s", base, e)
                 continue
@@ -417,15 +383,13 @@ class PublicStore(DataStore):
             return
 
     def _sync_from(self, base: str) -> bool:
-        r = requests.get(f"{base}/latest.json", headers=headers(), timeout=15)
-        r.raise_for_status()
-        remote = check_manifest(r.json())
+        remote = self._read_manifest(base)
         if not self._newer(remote):
             return False
         log.info("统计数据有更新：%s（样本截至 %s），从 %s 下载", remote.get("patch"), remote.get("snapshot_at"), base)
         self.sync_progress = {"done": 0, "total": 0}  # 界面据此显示"统计数据更新中 x / y MB"
         try:
-            download(base, remote, self.downloaded,
+            download(base, remote, self.downloaded, transport=self.transport,
                      progress=lambda d, t: setattr(self, "sync_progress", {"done": d, "total": t}))
         finally:
             self.sync_progress = None
