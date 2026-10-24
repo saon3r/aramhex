@@ -26,7 +26,7 @@
 
 from __future__ import annotations
 
-from .data.metadata import RARITY_CN, RARITIES, augment_en
+from .data.metadata import RARITY_CN, RARITIES, augment_en  # RARITY_CN 由调用方/测试继续引用
 from .messages import tr
 
 REROLL_BELOW = -0.5  # 低于英雄基准 0.5pp 以上：可考虑刷新
@@ -75,9 +75,12 @@ def display_name(aid: str, name: str) -> str:
 
 
 def augment_label(aid: str, meta: dict | None) -> str:
-    """玩家看到的英文名：优先数据集里的英文名，缺了用公开元数据的英文名（绝不显示中文）。"""
+    """玩家看到的英文名：优先数据集里的英文名，缺了用公开元数据的英文名。
+
+    绝不回退到中文的 `name`——那是认字用的识别名，显示出来就又漏中文了。
+    """
     meta = meta or {}
-    return meta.get("name_en") or augment_en(aid) or meta.get("name") or aid
+    return meta.get("name_en") or augment_en(aid) or aid
 
 
 def pentakill_rates(store, hero_id: str | None) -> dict | None:
@@ -280,9 +283,10 @@ def evaluate(store, hero_id: str | None, slots: list[str | None], k: int = 300) 
                             label=label, games=bl["games"], win=f"{bl['win'] * 100:.1f}",
                             games_all=bl["games_all"], win_all=f"{bl['win_all'] * 100:.1f}",
                             delta=f"{d:+.1f}")
-                         if bl["games"] else tr("reason.hero_win", win=f"{bl['win_all'] * 100:.1f}",
-                                                games=bl["games_all"], sample=sample_text(r["sample"]),
-                                                label=label, delta=f"{d:+.1f}"))
+                         if bl["games"] else tr("reason.band_blend_no_band", label=label,
+                                                games_all=bl["games_all"],
+                                                win_all=f"{bl['win_all'] * 100:.1f}",
+                                                delta=f"{d:+.1f}"))
             r["reasons"].append(band_part)
             r["score"] = round(d, 2)
             r["basis"] = "hero_win"

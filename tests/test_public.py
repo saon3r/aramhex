@@ -2,6 +2,7 @@
 
 import functools
 import json
+import re
 import threading
 from http.server import SimpleHTTPRequestHandler, ThreadingHTTPServer
 from pathlib import Path
@@ -9,6 +10,8 @@ from pathlib import Path
 import pytest
 
 from conftest import make_dataset
+
+CJK = re.compile("[\u3000\u3400-\u9fff\uf900-\ufaff\u3040-\u30ff\uac00-\ud7af\uff00-\uffef]")
 from httpfixtures import LocalTransport
 from lolhex.data import public
 from lolhex.data.public import Dataset, DatasetError, PublicStore, check_manifest
@@ -333,3 +336,18 @@ def test_overlay_summoners_show_win_rate():
     assert "Win rate" not in off and "Pick rate 90.0%" in off
     full = "".join(buildview.lines(d, None, True))
     assert "Win rate 53.4% · Pick rate 90.0%" in full
+
+def test_non_normal_mode_label_is_english():
+    """数据集给的 mode_label 是中文；非普通模式的显示名不能漏中文到状态栏。"""
+    from lolhex.data.public import _mode_label
+
+    class D:
+        mode = "first-prismatic"
+        mode_label = "\u9996\u6b21\u68f1\u5f69"   # 首次棱彩
+
+    label = _mode_label(D())
+    assert label == "First Prismatic" and not CJK.search(label)
+    assert _mode_label(None) is None
+    D.mode, D.mode_label = "normal", "\u5e38\u89c4"
+    assert _mode_label(D()) is None
+

@@ -43,6 +43,19 @@ BANDS = {"casual": "娱乐", "mid": "中分", "high": "前 5%"}
 BAND_ALIASES = {"top": "high"}  # 老设置文件、查分服务里的 top 当 high
 
 
+def _mode_label(dataset) -> str | None:
+    """非普通模式的显示名。数据集的 mode_label 是中文，能不用就不用：用模式代码写成英文。
+
+    普通模式（normal）不显示；数据集给了 ASCII 标签（以后可能改成英文）才用它。
+    """
+    if dataset is None or dataset.mode == "normal":
+        return None
+    label = str(getattr(dataset, "mode_label", "") or "")
+    if label.isascii() and label.strip():
+        return label
+    return str(dataset.mode).replace("-", " ").replace("_", " ").strip().title()
+
+
 def norm_band(band):
     return BAND_ALIASES.get(band, band) if band else band
 BUNDLED_DIR = Path(__file__).with_name("bundled")
@@ -688,7 +701,7 @@ class PublicStore(DataStore):
                  dataset_label=self.label(), bands_available=self.bands_available(),
                  band=self.band, band_effective=self.effective_band(),
                  dataset_mode=ds.mode if ds else None,
-                 dataset_mode_label=(ds.mode_label or ds.mode) if ds and ds.mode != "normal" else None,
+                 dataset_mode_label=_mode_label(ds),
                  data_updated_at=self.data_updated_at, sync_error=self.sync_error,
                  data_progress=self.sync_progress, data_note=self.data_note, data_offer=self.data_offer)
         return s
