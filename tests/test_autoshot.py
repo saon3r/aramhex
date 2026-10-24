@@ -44,7 +44,7 @@ def test_one_shot_per_offer_unmasked(env):
     run(later)
     assert len(shots) == 2
     files = sorted(p.name for p in autoshot.shots_dir().glob("*.png"))
-    assert len(files) == 2 and all(n.endswith("-三选一.png") for n in files)
+    assert len(files) == 2 and all(n.endswith("-offer.png") for n in files)
 
 
 def test_champ_select_waits_until_labels_settle(env, monkeypatch):

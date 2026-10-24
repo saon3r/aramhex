@@ -40,5 +40,7 @@ def test_completer_matches_aliases(store):
     assert hits("提莫") == ["17"]
     m = comp.completionModel()
     comp.setCompletionPrefix("提百万")
-    assert m.index(0, 0).data() == "提莫 迅捷斥候（提百万、蘑菇、提莫队长）"  # 下拉里显示的文字
+    shown = m.index(0, 0).data()
+    assert shown == "Teemo the Swift Scout"  # 下拉里显示的文字是英文名 + 英文称号
+    assert "提莫" not in shown and "迅捷斥候" not in shown  # 中文名/称号/外号不再显示
     assert app is not None

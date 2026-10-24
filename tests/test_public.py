@@ -305,7 +305,7 @@ def test_optional_spells_and_items_files(store):
     assert d["item_stats"][0]["item"]["id"] == "3115" and abs(d["item_stats"][0]["win"] - 0.54) < 1e-9
     from lolhex.ui import buildview
     html = "<br>".join(buildview.lines(d, None, True))
-    assert "召唤师技能" in html and "常出装备" in html
+    assert "Summoner spells" in html and "Common items" in html
 
 
 def test_summoners_pick_over_10pct_sorted_by_win_top2():
@@ -328,8 +328,8 @@ def test_overlay_summoners_show_win_rate():
          "summoner_source": "自采统计"}
     compact = buildview.lines(d, None, True, compact=True)
     rows = [x for x in compact if "闪现" in x]
-    assert len(rows) == 2 and "胜率 53.4% · 出场 90.0%" in rows[0] and "胜率 51.0% · 出场 10.0%" in rows[1]
+    assert len(rows) == 2 and "Win rate 53.4% · Pick rate 90.0%" in rows[0] and "Win rate 51.0% · Pick rate 10.0%" in rows[1]
     off = "".join(buildview.lines(d, None, False, compact=True))
-    assert "胜率" not in off and "出场 90.0%" in off
+    assert "Win rate" not in off and "Pick rate 90.0%" in off
     full = "".join(buildview.lines(d, None, True))
-    assert "胜率 53.4% · 出场 90.0%" in full
+    assert "Win rate 53.4% · Pick rate 90.0%" in full

@@ -6,7 +6,23 @@ from PySide6.QtCore import QRectF, Qt
 from PySide6.QtGui import QColor, QFont, QPainter, QPen
 from PySide6.QtWidgets import QWidget
 
-POSITIONS = [("top", "卡片上方（默认，压在图标下半）"), ("bottom", "卡片下方（描述下面的空白处）")]
+from ..messages import tr
+
+# 位置机器码和目录键：机器码不进目录，只有标签走文案表。
+_BADGE_POSITION_KEYS = (("top", "settings.badge.top"), ("bottom", "settings.badge.bottom"))
+
+
+class _BadgePositions:
+    """POSITIONS 的惰性视图：遍历时才取标签，所以界面语言换了不用重建下拉框。"""
+
+    def __iter__(self):
+        return iter([(code, tr(key)) for code, key in _BADGE_POSITION_KEYS])
+
+    def __len__(self) -> int:
+        return len(_BADGE_POSITION_KEYS)
+
+
+POSITIONS = _BadgePositions()
 
 
 class BadgePosPreview(QWidget):
@@ -44,5 +60,5 @@ class BadgePosPreview(QWidget):
         f.setBold(True)
         p.setFont(f)
         p.setPen(QColor(95, 211, 141))
-        p.drawText(box, Qt.AlignCenter, "首选 +2.0")
+        p.drawText(box, Qt.AlignCenter, tr("badgepos.preview"))
         p.end()
