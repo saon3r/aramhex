@@ -10,7 +10,6 @@ def test_missing_hero_prompt_and_next_game(store, tmp_path, monkeypatch, manual)
     from lolhex.engine import Engine
     from lolhex.ui.overlay import ControlPanel
     app = QApplication.instance() or QApplication([])
-    monkeypatch.setattr(Engine, "_prefetch_hero", lambda *a: None)
     engine = Engine(Settings(), home=tmp_path, store=store)
     panel = ControlPanel(engine)
     monkeypatch.setattr(panel, "_place_body", lambda: None)

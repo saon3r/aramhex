@@ -52,7 +52,7 @@ requests and no game-memory, injection or packet-capture access.
 
 - Install ID, log upload, usage reporting, remote config/notices/rollout, Riot-ID rank
   lookup, self-update/patching and Korean OCR model download have been removed.
-- **Still present temporarily:** Tencent static metadata/build fetches
+- **Still present temporarily:** Tencent static metadata fetches
   (`game.gtimg.cn`, `mlol.qt.qq.com`) and fixed jsDelivr stats mirrors. Those are being
   removed/reviewed in the ongoing Tasks 3–4; this document describes the final target, not
   a claim that every host above is already the only one contacted.

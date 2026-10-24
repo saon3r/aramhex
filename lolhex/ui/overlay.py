@@ -208,14 +208,14 @@ class BadgeLayer(_Layer):
                 if show_win and recommend.win_text(r):
                     s += " · " + recommend.win_text(r)
                 lines.append(s)
+            else:
+                wt = recommend.win_text(r)
+                if wt:
+                    lines.append(wt)
             meta = []
             if r.get("rarity") and r.get("rank"):
                 metric = "胜率" if r.get("rank_basis") == "hero_rarity_win_rate" else ""
                 meta.append(f"{RARITY_CN.get(r['rarity'], '')}{metric}第{r['rank']}/{r.get('rank_total') or '?'}")
-            if r.get("tier"):
-                meta.append(f"{r['tier']}级")
-            if r.get("basis") == "tier_only":
-                meta.append("按官方层级")
             if r.get("basis") == "pbe" and r.get("pbe_games"):  # 新海克斯先用测试服数据：直接给局数和胜率，看得出高低
                 meta.append(f"测试服 {r['pbe_games']} 局 胜率{_pct(r['pbe_win'])}")
             if r.get("thin") == "few":
@@ -808,9 +808,6 @@ class ControlPanel(QWidget):
                 parts.append(f"<span style='color:#c9a0ff'>{escape(pk)}</span>")
         if d:
             parts.extend(buildview.lines(d, self.engine.icons, show_win, size=22, compact=True))
-            sk = buildview.skills_line(d, show_win)
-            if sk:
-                parts.append(sk)
             top = [a for a in d.get("augments", []) if a.get("delta") is not None and a.get("sample") != "low"]
             top.sort(key=lambda a: -a["delta"])
             if top:

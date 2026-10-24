@@ -494,16 +494,13 @@ class MainWindow(QMainWindow):
 
     def _hero_html(self, d, show_win) -> str:
         out = buildview.lines(d, self.engine.icons, show_win, size=28)
-        sk = buildview.skills_line(d, show_win)
-        if sk:
-            out.append(sk)
         top = [a for a in d.get("augments", []) if a.get("delta") is not None and a.get("sample") != "low"]
         top.sort(key=lambda a: -a["delta"])
         if top:
             out.append("<b>推荐海克斯</b>")
             for a in top[:8]:
                 out.append(f"　{a['name']} <span style='color:#777'>{RARITY_CN.get(a.get('rarity'), '')}"
-                           f" {a.get('tier') or ''}</span> <b style='color:#2e9d5b'>{a['delta']:+.1f}</b>")
+                           f"</span> <b style='color:#2e9d5b'>{a['delta']:+.1f}</b>")
         return "<br>".join(out)
 
     def _render_offer(self, ev, show_win):
@@ -519,12 +516,13 @@ class MainWindow(QMainWindow):
             v, col = VERDICT_CN.get(r["verdict"], VERDICT_CN["unknown"])
             lines = [f"<b style='color:{col}'>{v}</b>", f"<b>{r.get('name') or '未识别'}</b>"]
             meta = [RARITY_CN.get(r.get("rarity"), "")]
-            if r.get("tier"):
-                meta.append(f"{r['tier']}级")
             lines.append("<span style='color:#777'>" + " ".join(m for m in meta if m) + "</span>")
             if r["verdict"] == "nodata":
                 note = recommend.NEW_NOTE if r.get("basis") == "new" else recommend.NODATA_NOTE
                 lines.append(f"<span style='color:#777'>{note}</span>")
+                wt = recommend.win_text(r)
+                if wt:
+                    lines.append(wt)
             if r.get("basis") == "pbe":
                 pbe = f"测试服 {r['pbe_games']} 局 · 胜率 {_pct(r['pbe_win'])}，" if r.get("pbe_games") else ""
                 lines.append(f"<span style='color:#777'>{pbe}{recommend.PBE_NOTE}</span>")

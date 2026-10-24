@@ -88,12 +88,7 @@ def store(tmp_path, no_network):
         "items": tencent.parse_items(fixture("tencent_items.json")),
         "spells": tencent.parse_summoner_spells(fixture("tencent_summoner_spells.json")),
     }
-    hero17 = tencent.parse_hero_hex(fixture("tencent_hero17.json"))
-    hero17.update(spells=tencent.parse_hero_spells(fixture("tencent_hero17_spells.json")),
-                  fetched_at=now, patch="16.20", splash=None)
     (root / "static.json").write_text(json.dumps(static, ensure_ascii=False), encoding="utf-8")
-    (root / "hero").mkdir()
-    (root / "hero" / "17.json").write_text(json.dumps(hero17, ensure_ascii=False), encoding="utf-8")
     bundled = tmp_path / "bundled"
     make_dataset(bundled)
     return PublicStore(root, bundled=bundled, check_updates=False)

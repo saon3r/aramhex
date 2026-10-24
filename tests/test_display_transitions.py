@@ -66,14 +66,13 @@ def test_badges_follow_physical_pixels_at_current_qt_scale(size, position, tmp_p
     app.processEvents()
 
 
-def test_main_window_removes_hero_and_recommendation_after_game_end(store, tmp_path, monkeypatch):
+def test_main_window_removes_hero_and_recommendation_after_game_end(store, tmp_path):
     from PySide6.QtWidgets import QApplication
     from lolhex.config import Settings
     from lolhex.engine import Engine
     from lolhex.ui.mainwindow import MainWindow
     from lolhex.vision.detector import Offer
     app = QApplication.instance() or QApplication([])
-    monkeypatch.setattr(Engine, "_prefetch_hero", lambda *a: None)
     eng = Engine(Settings(), home=tmp_path, store=store)
     window = MainWindow(eng, SimpleNamespace(set_visible=lambda *a: None))
     window.show()

@@ -11,7 +11,8 @@
 - 下载的：<app_home>/data/public/（启动时查数据仓库的 latest.json，有新数据就下载，逐个文件校验 SHA-256）。
   先试 GitHub，连不上或校验不过就换 jsDelivr 镜像（DATA_SOURCES）。
 
-官方资料（英雄、海克斯字典、出装、加点）仍由父类 DataStore 直接从腾讯取。
+静态资料（英雄、海克斯字典、装备）仍由父类 DataStore 取；单英雄出装、加点、官方层级已移除，
+hero() 只返回自采统计口径的数据。
 """
 
 from __future__ import annotations
@@ -583,19 +584,18 @@ class PublicStore(DataStore):
         return {"source": cfg["source"], "items": rows} if rows else None
 
     def hero(self, hero_id: str, allow_network: bool = True) -> dict | None:
-        """官方出装、加点 + 海克斯列表（有统计的在前，带出场占比；官方层级一并保留）。"""
-        data = self.official_hero(hero_id, allow_network) or {}
-        stats = self.win_data(hero_id)
+        """统计口径的单英雄资料：只有有统计的海克斯，带稀有度和本英雄出场占比。
+        官方出装、加点、层级、原画已移除；没有统计返回 None。"""
+        stats = self.win_data(hero_id, band=None)  # 列出所有有统计的海克斯，不随当前分段缺行
         if not stats:
-            return data or None
-        official = {a["id"]: a for a in data.get("augments") or []}
+            return None
         augments = []
         for aid, a in stats["augments"].items():
-            t = official.pop(aid, {})
-            augments.append({**t, "id": aid, "rarity": t.get("rarity") or self.augments.get(aid, {}).get("rarity"),
-                             "pick": a["games"] / stats["sample_games"]})
-        augments += list(official.values())  # 统计里还没有的（新海克斯）：只有官方层级
-        return {**data, "augments": augments}
+            meta = self.augments.get(aid) or {}
+            augments.append({"id": aid, "rarity": meta.get("rarity"),
+                             "pick": a["games"] / stats["sample_games"] if stats["sample_games"] else None})
+        return {"source": "public", "label": stats["label"], "patch": stats["patch"],
+                "date": None, "augments": augments}
 
     def status(self) -> dict:
         s = super().status()

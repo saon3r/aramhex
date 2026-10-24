@@ -83,6 +83,8 @@
 
 ## Task 2 — Remove telemetry and remote execution/control
 
+**Status:** Implemented and independently reviewed in `a978662`. Controller full suite: **260 passed**. Fresh-install recognition default was pulled forward to this chunk (`Settings.game_lang = "en_US"`). Release-workflow patch callers and retired `logs_sent` extras were removed after review. Real post-removal application refresh and offline/live acceptance remain open under Task 9; this status does not waive them.
+
 **Files:** delete `lolhex/cloud.py`, `cloudsettings.py`, `logupload.py`, `rank.py`, `update.py`, `patch.py`, `langpack.py`; modify `__main__.py`, `config.py`, `engine.py`, `data/public.py`, `ui/mainwindow.py`, `ui/overlay.py`, relevant tests and privacy documentation. Do not remove RapidOCR itself (milestone 3).
 
 - [ ] Write failing tests that startup/settings load never calls identifier generation; retired config keys are ignored/dropped using the established `REMOVED` migration pattern; no forbidden feature is imported or callable through surviving UI/CLI.
@@ -96,6 +98,8 @@
 - [ ] Worker runs only its focused tests; the controller runs the full offscreen suite, reports remaining unsupported tests explicitly and reviews stat/hunks before accepting the chunk.
 
 ## Task 3 — Cut upstream builds/skills/tiers and prove honest fallback
+
+**Status:** Implemented, controller suite **289 passed**, independent scoped review clear. Unsupported tier/build/skill sources and obsolete prefetch hooks are gone; scan JSON includes basis/rate-label/source evidence. Pure metadata adapters are present but not runtime-integrated: Task 4's schema/filtering acceptance is still mandatory.
 
 **Files:** `data/store.py`, `data/tencent.py`, `panel.py`, `recommend.py`, `data/public.py` as needed, `ui/buildview.py`, `ui/mainwindow.py`, `ui/overlay.py`; `tests/test_recommend.py`, `test_public.py`, `test_augment_items.py`, `test_data_parsers.py`, new `tests/test_advice_fallback.py`.
 
@@ -113,6 +117,9 @@
 - [ ] Write tests for the GET-only boundary: reject unknown host/path, userinfo/ports, traversal, payload-supplied absolute URLs, unsupported methods, identity/cookie headers and redirects before sending. Reject external redirects rather than following and checking after data has already escaped.
 - [ ] Define the minimal host/path table in code and AGENTS.md: `aramhex.com/u/data/` for stats; `raw.githubusercontent.com/czgreat/aramhex-data/` for stats fallback; `ddragon.leagueoflegends.com` for versions/champion/item metadata/portraits/item icons; `raw.communitydragon.org` for static augment metadata/icons. CommunityDragon is community-hosted, not a Riot-owned CDN. Remove jsDelivr probes/mirrors if not needed by these two stats routes; any retained additional host requires explicit purpose and policy tests before acceptance.
 - [ ] Test static parsing by stable numeric ID, all active bundled IDs resolving English names (current coverage 232 augments/173 champions), six Cherry-path augment IDs not being filtered out, and safe ASCII unknown-ID fallbacks.
+- [ ] Before using the adapters at runtime, prove new/PBE flags reach `store.augments` and preserve honest new/nodata/`?` advice; prove arena-only records are excluded while all six Cherry-path Mayhem IDs remain available. Do not replace source mode semantics with universal `modes: []` admission.
+- [ ] Preserve English names/aliases and existing Chinese title/alias search across the source swap. Reuse bundled aliases and cached keywords where available; the English fork need not generate Tencent-specific pinyin shortcuts, but recognition titles must not disappear. Pin the intended behavior in search/matcher tests rather than silently dropping coverage.
+- [ ] Reject or safely skip unknown source rarity codes before they can create a fictitious fourth ranked rarity group; keep valid bundled/cache metadata when a refreshed record is malformed. Add the parser-to-scorer regression case.
 - [ ] Test `DataStore`/`PublicStore`/`Engine` construction without network or `static.json`: populate recognition metadata from verified downloaded dataset or bundled heroes/augments plus existing i18n tables. Preserve Chinese recognition fields; add separate English display accessors. Replace the `roles`-presence refresh sentinel.
 - [ ] Set the actual `Settings.game_lang` dataclass default to `"en_US"`, not merely a sample/user config. Add `test_fresh_settings_default_to_english_recognition` and `test_missing_game_lang_config_uses_english_recognition`; with no hand-edited settings, assert the engine's matcher resolves the three English fixture names. Preserve an explicitly selected supported language in an existing config. UI default remains separately `en_GB`.
 - [ ] Test invalid/truncated/wrong-schema cache, partial metadata-family failure, interrupted writes, invalid image bytes and missing assets. Valid cache must survive failed refresh; bundled fallback must be immediately usable.
@@ -122,6 +129,8 @@
 - [ ] Worker runs focused tests; the controller runs the full suite, confirms no Tencent host, rank API, hidden model or self-update path survives, and reviews stat/hunks.
 
 ## Task 5 — Portrait migration without matcher regression
+
+**Partial evidence:** Public source/client image fixtures and unchanged-classifier baseline tests landed in `a978662`: five Data Dragon references matched five client crops; original bundled-only bank scored 165 correct / 8 abstentions / 0 wrong of 173. Combined-bank coverage is self-match coverage, not independent accuracy. Source migration, offline integration and live bench acceptance are still pending.
 
 **Files:** `vision/portraits.py`, `data/metadata.py`, `engine.py`, `tests/test_portraits.py`, new public-image assets under `tests/fixtures/portraits/` with source/version attribution.
 

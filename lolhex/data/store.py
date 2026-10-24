@@ -1,9 +1,9 @@
-"""腾讯官方资料：抓取、落盘、按需刷新。
+"""静态资料：抓取、落盘、按需刷新。
 
 目录：<app_home>/data/
   static.json        英雄、海克斯字典、装备、召唤师技能、版本
-  hero/<id>.json     单英雄的官方出装、加点、海克斯层级（按需抓取）
 
+腾讯官方单英雄出装、加点、层级已移除，不再有 hero/<id>.json，也不会从旧磁盘缓存复活官方层级。
 网络失败时继续使用旧缓存，并在 status() 里标明，界面据此提示"官方资料可能过期"。
 胜率统计不在这里，见 public.py（自采统计数据）。
 """
@@ -64,7 +64,6 @@ class DataStore:
         self._lock = threading.RLock()
         self.static: dict = _read(self.root / "static.json") or {}
         self.ranks: dict = {}
-        self._heroes: dict[str, dict] = {}
         self.last_error: str | None = None
 
     # ---------- 刷新 ----------
@@ -100,8 +99,6 @@ class DataStore:
             log.info("CommunityDragon 补充失败：%s", e)
         patch = versions[0]["name"] if versions else self.static.get("patch", "")
         with self._lock:
-            if patch and patch != self.static.get("patch"):
-                self._heroes.clear()  # 新版本：单英雄缓存作废
             self.static = {"fetched_at": time.time(), "patch": patch, "versions": versions[:6],
                            "heroes": heroes, "augments": augments, "items": items, "spells": spells}
             _write(self.root / "static.json", self.static)
@@ -200,42 +197,9 @@ class DataStore:
                     return hid
         return None
 
-    def official_hero(self, hero_id: str, allow_network: bool = True) -> dict | None:
-        """单英雄官方数据：出装、加点、海克斯层级、原画。优先内存，再磁盘，过期则联网。"""
-        hero_id = str(hero_id)
-        with self._lock:
-            cached = self._heroes.get(hero_id)
-        path = self.root / "hero" / f"{hero_id}.json"
-        if cached is None:
-            cached = _read(path)
-        patch = self.static.get("patch")
-        fresh = cached and not self._stale(cached) and cached.get("patch") == patch and "splash" in cached
-        if not fresh and allow_network:
-            try:
-                data = tencent.parse_hero_hex(tencent.fetch_hero_hex(hero_id))
-                try:
-                    raw = tencent.fetch_hero_file(hero_id)
-                    data["spells"] = tencent.parse_hero_spells(raw)
-                    data["splash"] = tencent.parse_hero_splash(raw)
-                except Exception:
-                    data["spells"] = (cached or {}).get("spells", {})
-                    data["splash"] = (cached or {}).get("splash")
-                data["fetched_at"] = time.time()
-                data["patch"] = patch
-                _write(path, data)
-                cached = data
-            except Exception as e:
-                log.warning("获取英雄 %s 官方数据失败：%s", hero_id, e)
-                self.last_error = f"英雄 {hero_id}：{e}"
-        if cached is None:
-            return None
-        with self._lock:
-            self._heroes[hero_id] = cached
-        return cached
-
-    # 统计数据由子类（PublicStore）提供；这里给出"没有统计"时的默认值
+    # 统计数据由子类（PublicStore）提供；这里保留统计接口，没有统计时返回 None。
     def hero(self, hero_id: str, allow_network: bool = True) -> dict | None:
-        return self.official_hero(hero_id, allow_network)
+        return self.win_data(hero_id, allow_network)
 
     def win_data(self, hero_id: str, allow_network: bool = True) -> dict | None:
         return None

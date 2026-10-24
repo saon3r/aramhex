@@ -141,8 +141,6 @@ class Engine:
         hid = self.store.resolve_hero(hero_key) if hero_key else None
         self._manual_hero = hid is not None
         self._set(hero_id=hid, hero_source="manual" if hid else None, hero_candidates=[])
-        if hid:
-            threading.Thread(target=self._prefetch_hero, args=(hid,), daemon=True).start()
         self._reevaluate()
 
     def set_band(self, band: str | None) -> None:
@@ -153,9 +151,6 @@ class Engine:
         if hasattr(self.store, "set_band"):
             self.store.set_band(band or None)
         self._panel_cache = (None, None)
-        hid = self.state.get("hero_id")
-        if hid:
-            threading.Thread(target=self._prefetch_hero, args=(hid,), daemon=True).start()
         self._reevaluate()
 
     def correct_slot(self, index: int, augment_id: str | None) -> None:
@@ -301,10 +296,6 @@ class Engine:
                 "win": (ranks.get(hid) or {}).get("win"), "rank": rank, "total": total,
                 "grade": rank_grade(rank, total)}
 
-    def _prefetch_hero(self, hid: str) -> None:
-        self.store.hero(hid)
-        self._panel_cache = (None, None)
-
     # ---------- 窗口状态与英雄识别 ----------
 
     def _observer_loop(self) -> None:
@@ -341,7 +332,6 @@ class Engine:
     def _set_hero_auto(self, hid: str, source: str) -> None:
         if self.state["hero_id"] != hid:
             self._set(hero_id=hid, hero_source=source)
-            threading.Thread(target=self._prefetch_hero, args=(hid,), daemon=True).start()
             self._reevaluate()
 
     def _champ_select_scan(self, hwnd: int) -> None:

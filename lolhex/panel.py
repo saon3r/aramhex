@@ -1,10 +1,9 @@
-"""单英雄资料面板：胜率与评级、海克斯全表、出装、加点。主窗口和游戏内浮窗共用。"""
+"""单英雄资料面板：胜率与评级、海克斯全表、自采统计的召唤师技能与装备。主窗口和游戏内浮窗共用。
+腾讯官方出装、加点、搭档和原画已移除，不再读取官方层级。"""
 
 from __future__ import annotations
 
 from . import recommend
-
-MIN_SHARE = 0.1     # 出装按胜率排之前，先去掉出场不到同类最热门 1/10 的（样本太少，胜率说明不了什么）
 
 
 # 召唤师技能组合：只放出场率 ≥10% 的，按胜率排，最多两组（用户 10-22 定）。
@@ -16,16 +15,6 @@ SUMMONER_SHOW = 2
 def sort_summoners(rows: list[dict]) -> list[dict]:
     enough = sorted((r for r in rows if r["pick"] >= SUMMONER_MIN_PICK), key=lambda r: -r["win"])
     return enough[:SUMMONER_SHOW] or sorted(rows, key=lambda r: -r["games"])[:1]
-
-
-def by_win(rows: list[dict], min_games: int = 0) -> list[dict]:
-    """有一定出场的里面按胜率从高到低排。出场率缺失时用场次比较。"""
-    def share(x):
-        return x.get("pick") or x.get("games") or 0
-    top = max((share(x) for x in rows), default=0)
-    keep = [x for x in rows if x.get("win") is not None and share(x) >= top * MIN_SHARE
-            and (x.get("games") or min_games) >= min_games]
-    return sorted(keep, key=lambda x: -x["win"])
 
 
 def hero_panel(store, hero_key, k: int = 300) -> dict | None:
@@ -63,15 +52,6 @@ def hero_panel(store, hero_key, k: int = 300) -> dict | None:
         it = items.get(str(i), {})
         return {"id": str(i), "name": it.get("name") or name or str(i), "icon": it.get("icon")}
 
-    b = data.get("builds") or {}
-    # 官方出装都按胜率排（只比有一定出场的）
-    builds = {
-        "full": [{**x, "items": [item(i) for i in x["items"]]} for x in by_win(b.get("full", []))],
-        "core": [{**x, "items": [item(i) for i in x["items"]]} for x in by_win(b.get("core", []))],
-        "first": [{**x, "item": item(x["item"])} for x in by_win(b.get("first", []))],
-        "shoes": [{**x, "item": item(x["item"])} for x in by_win(b.get("shoes", []))],
-        "start": [{**x, "items": [item(i) for i in x["items"]]} for x in by_win(b.get("start", []))],
-    }
     # 自采统计的召唤师技能、装备（数据里有 hero_spells.json / hero_items.json 才有）
     summoners, sum_src, item_stats = [], "", []
     if hasattr(store, "hero_spells"):
@@ -87,12 +67,9 @@ def hero_panel(store, hero_key, k: int = 300) -> dict | None:
     return {
         "hero": store.heroes.get(hid),
         "rank": {**rank, "total": n_heroes},
-        "augments": augs, "builds": builds, "skills": data.get("skills", []), "spells": data.get("spells", {}),
-        "partners": [{**p, "hero": store.heroes.get(p["hero"], {"id": p["hero"]})}
-                     for p in data.get("partners", [])],
+        "augments": augs,
         "date": data.get("date"), "patch": store.static.get("patch"),
         "data_patch": ag.get("patch"), "data_revision": (store.status().get("dataset_revision")),
-        "splash": data.get("splash"),
         "win_source": ag.get("label") or "暂无统计数据", "summoners": summoners,
         "summoner_source": sum_src if summoners else "", "summoner_source_date": str(getattr(getattr(store, "dataset", None), "snapshot_at", "") or "")[:10] or None,
         "item_stats": item_stats,

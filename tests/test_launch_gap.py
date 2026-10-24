@@ -14,7 +14,6 @@ def observer(store, tmp_path, monkeypatch):
     now = [1000.0]
     scene = {"game": None, "cs": {"mine": "17", "team": [], "bench": []}}
     monkeypatch.setattr(module.time, "monotonic", lambda: now[0])
-    monkeypatch.setattr(Engine, "_prefetch_hero", lambda *args: None)
     monkeypatch.setattr(module.win, "find_game_window", lambda: scene["game"])
     monkeypatch.setattr(module.win, "find_client_window", lambda: 2)
     monkeypatch.setattr(module.win, "is_foreground", lambda hwnd: True)

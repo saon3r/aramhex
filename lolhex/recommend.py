@@ -1,9 +1,9 @@
-"""三选一评分：以本英雄的海克斯胜率为主，官方层级只做兜底。
+"""三选一评分：以自采统计为准，官方层级已移除。
 
 数据来源（依次）：
-1. 自采统计：本英雄 × 这个海克斯的胜率（可按分段）；
-2. 腾讯官方层级 S/A/B/C（没有胜率时粗估）；
-3. 未识别英雄时：自采统计里这个海克斯在所有英雄上的合计胜率。
+1. 自采统计：本英雄 × 这个海克斯的胜率（样本足够才单独成立；可按分段）；
+2. 本英雄没有数据或样本太少：自采统计里这个海克斯在所有英雄上的合计胜率，明确标 all champs；
+3. 全英雄样本也不足：只显示「?」，不给数字，标无数据。
 
 分数 = 相对该英雄基准胜率的Δ胜率（百分点）：
 1. 贝叶斯平滑：smoothed = (胜率×场次 + 基准×k) / (场次 + k)，k 默认 300，小样本的高胜率会被拉回基准附近。
@@ -28,7 +28,6 @@ from __future__ import annotations
 
 from .data.tencent import RARITY_CN
 
-TIER_PP = {"S": 1.5, "A": 0.5, "B": -0.5, "C": -1.5, "D": -2.5}
 REROLL_BELOW = -0.5  # 低于英雄基准 0.5pp 以上：可考虑刷新
 REROLL_GAP = 2.0     # 比首选低 2pp 以上：可考虑刷新
 RELIABLE_GAMES = 1000  # 本英雄局数达到这个数才能当首选
@@ -45,12 +44,23 @@ PBE_DISPLAY_MIN_GAMES = 30
 
 
 def win_text(row: dict) -> str:
-    """显示口径独立于打分；新海克斯本英雄不足 30 局时明确显示全英雄胜率。"""
-    if row.get("display_win_scope") == "global":
-        return f"全英雄胜率{row['display_win'] * 100:.1f}% · 本英雄{row.get('games') or 0}局"
+    """显示口径独立于打分：全英雄口径明确写 all champs；没有可靠数据只显示 ?。"""
+    if row.get("basis") == "global_win":
+        if row.get("win") is None:
+            return "?"
+        text = f"all champs {row['win'] * 100:.1f}%"
+        if row.get("hero_games"):
+            text += f" · 本英雄{row['hero_games']}局"
+        return text
+    if row.get("display_win_scope") == "global" and row.get("display_win") is not None:
+        return f"all champs {row['display_win'] * 100:.1f}% · 本英雄{row.get('games') or 0}局"
     if row.get("basis") == "pbe" and (row.get("games") or 0) < PBE_DISPLAY_MIN_GAMES:
-        return f"全英雄胜率{row['pbe_win'] * 100:.1f}% · 本英雄{row.get('games') or 0}局"
-    return f"胜率{row['win'] * 100:.1f}%" if row.get("win") is not None else ""
+        return f"all champs {row['pbe_win'] * 100:.1f}% · 本英雄{row.get('games') or 0}局"
+    if row.get("win") is not None:
+        return f"胜率{row['win'] * 100:.1f}%"
+    if row.get("verdict") == "nodata" or row.get("basis") in ("nodata", "excluded", "new"):
+        return "?"
+    return ""
 
 
 def display_name(aid: str, name: str) -> str:
@@ -99,6 +109,11 @@ def sample_level(games: int | None) -> str:
 
 
 SAMPLE_CN = {"none": "无样本", "low": "样本少，仅参考", "medium": "样本中等", "high": "样本充足"}
+
+
+def _supported(games: int | None) -> bool:
+    """沿用 sample_level 的既有样本门槛：low（<250 局）不单独成立。"""
+    return sample_level(games) in ("medium", "high")
 
 
 def smoothed_delta(win: float | None, games: int | None, base: float | None, k: int) -> float | None:
@@ -175,30 +190,27 @@ def _provisional(r: dict, p: dict, mine: dict | None, base: float | None, k: int
 
 
 def evaluate(store, hero_id: str | None, slots: list[str | None], k: int = 300) -> dict:
-    hero = store.hero(hero_id) if hero_id else None
     ag = store.win_data(hero_id) if hero_id else None
     label = (ag or {}).get("label") or "自采统计"
     ag_augs = (ag or {}).get("augments") or {}
     excluded = store.excluded_augments()
     provisional = store.provisional_augments() if hasattr(store, "provisional_augments") else {}
-    # 排名只在正式服统计的海克斯之间排：测试服的新海克斯不是同一个版本的数据，只显示测试服胜率、不排名；
-    # 剔除的不参与。4.0 删掉的海克斯过渡数据里已经去掉，名次的分母跟着变
+    # 排名只在正式服统计、样本足够的海克斯之间排：测试服的新海克斯不是同一个版本的数据，只显示测试服胜率、不排名；
+    # 剔除的和样本太少的都不参与。4.0 删掉的海克斯过渡数据里已经去掉，名次的分母跟着变
     blend = band_blend(store, hero_id, ag, k)
     rank_src = ({aid: {"win": (ag["sample_win"] + v["delta"] / 100), "games": v["games_all"]} for aid, v in blend.items()}
                 if blend is not None else ag_augs)
-    ranks_by_win = win_ranks({aid: s for aid, s in rank_src.items() if aid not in provisional and aid not in excluded},
+    ranks_by_win = win_ranks({aid: s for aid, s in rank_src.items()
+                              if aid not in provisional and aid not in excluded and _supported(s.get("games"))},
                              store.augments)
     base = (ag or {}).get("sample_win")
     if base is None and hero_id:
         base = ((store.ranks.get("heroes") or {}).get(str(hero_id)) or {}).get("win")
-    official = {a["id"]: a for a in (hero or {}).get("augments", [])}
-    rarity_total: dict[str, int] = {}
-    for a in official.values():
-        if a.get("tier") and a.get("rarity"):
-            rarity_total[a["rarity"]] = rarity_total.get(a["rarity"], 0) + 1
     global_augs = store.ranks.get("augments") or {}
-    total_games = sum(g.get("games") or 0 for g in global_augs.values())
-    global_mean = (sum(g["win"] * g["games"] for g in global_augs.values() if g.get("games")) / total_games
+    # 分子和分母只用同一批有效行（有局数且胜率不是 None），否则 win=None 的行会把均值压低。
+    valid_global = [g for g in global_augs.values() if g.get("games") and g.get("win") is not None]
+    total_games = sum(g["games"] for g in valid_global)
+    global_mean = (sum(g["win"] * g["games"] for g in valid_global) / total_games
                    if total_games else None)
 
     results = []
@@ -224,22 +236,15 @@ def evaluate(store, hero_id: str | None, slots: list[str | None], k: int = 300) 
         if aid in provisional:
             results.append(_provisional(r, provisional[aid], ag_augs.get(aid), base, k))
             continue
-        t = official.get(aid)
-        if t:
-            r.update(tier=t.get("tier"), pick=t.get("pick"))
         if aid in ranks_by_win:
             r.update(ranks_by_win[aid])
             r["reasons"].append(f"本英雄{RARITY_CN.get(r.get('rarity'), '')}胜率第{r['rank']}/{r['rank_total']}")
-        elif t and t.get("rank") and t.get("tier"):
-            rarity = t.get("rarity") or meta.get("rarity")
-            r.update(rank=t["rank"], rank_total=rarity_total.get(rarity))
-            r["reasons"].append(f"官方{RARITY_CN.get(rarity, '')}第{t['rank']}/{rarity_total.get(rarity, '?')}"
-                                f"（{t['tier']}级）")
 
-        # 1) 本英雄胜率（选了分段：分段和全体按局数综合）
+        # 1) 本英雄胜率（选了分段：分段和全体按局数综合）；样本太少不单独成立
         a = ag_augs.get(aid)
         bl = (blend or {}).get(aid)
-        if bl and base is not None:
+        slot_hero_games = (bl or {}).get("games") or (a or {}).get("games")
+        if bl and base is not None and _supported(bl["games_all"]):
             d = bl["delta"]
             r.update(win=bl["win"], games=bl["games"], games_all=bl["games_all"], win_all=bl["win_all"],
                      sample=sample_level(bl["games_all"]), source="public", band_weight=round(bl["weight"], 3))
@@ -248,26 +253,27 @@ def evaluate(store, hero_id: str | None, slots: list[str | None], k: int = 300) 
                                 f"按局数综合较英雄基准 {d:+.1f}pp")
             r["score"] = round(d, 2)
             r["basis"] = "hero_win"
-        elif a and a.get("win") is not None and a.get("games") and base is not None:
+        elif a and a.get("win") is not None and _supported(a.get("games")) and base is not None:
             d = smoothed_delta(a["win"], a["games"], base, k)
             r.update(win=a["win"], games=a["games"], sample=sample_level(a["games"]), source="public")
             r["reasons"].append(f"本英雄胜率 {a['win'] * 100:.1f}%（{a['games']}局，{SAMPLE_CN[r['sample']]}，"
                                 f"{label}），平滑后较英雄基准 {d:+.1f}pp")
             r["score"] = round(d, 2)
             r["basis"] = "hero_win"
-        # 2) 未识别英雄：所有英雄合计的胜率
-        if r["score"] is None and not hero_id:
+        # 2) 本英雄没有数据或样本太少：全英雄合计胜率，明确标 all champs；全英雄也很少就不给数字
+        if r["score"] is None and global_mean is not None:
             g = global_augs.get(aid)
-            if g and g.get("win") and global_mean:
+            if g and g.get("win") is not None and _supported(g.get("games")):
                 d = (g["win"] - global_mean) * 100
-                r.update(win=g["win"], games=g.get("games"), score=round(d, 2), basis="global_win")
-                r["reasons"].append(f"全英雄胜率 {g['win'] * 100:.1f}%，较平均 {d:+.1f}pp")
-        # 3) 只有官方层级
-        if r["score"] is None and r.get("tier") in TIER_PP:
-            r["score"] = TIER_PP[r["tier"]]
-            r["basis"] = "tier_only"
-            r["reasons"].append("没有胜率数据，按官方层级估计，可信度低")
-        # 4) 新海克斯（测试服 / 刚上线）：统计里还没有，不当成「几乎不选」去扣分。
+                r.update(win=g["win"], games=g.get("games"), score=round(d, 2), basis="global_win",
+                         rate_label="all champs", hero_games=slot_hero_games,
+                         sample=sample_level(g.get("games")), source="public")
+                why = "本英雄样本不足" if hero_id else "未识别英雄"
+                r["reasons"].append(f"{why}，all champs 胜率 {g['win'] * 100:.1f}%（{g.get('games')}局），"
+                                    f"较平均 {d:+.1f}pp")
+            elif g and g.get("win") is not None:
+                r["reasons"].append("all champs 样本也不足，无可靠数据")
+        # 3) 新海克斯（测试服 / 刚上线）：统计里还没有，不当成「几乎不选」去扣分。
         #    腾讯上线后可能去掉 isPBE 标记，所以整份统计里一局都没有的也算新的
         if r["score"] is None and (meta.get("new") or (global_augs and aid not in global_augs)):
             r.update(verdict="nodata", basis="new")
@@ -275,12 +281,8 @@ def evaluate(store, hero_id: str | None, slots: list[str | None], k: int = 300) 
             results.append(r)
             continue
         if r["score"] is None:
-            if hero_id and (official or ag):
-                r["score"] = -3.0
-                r["basis"] = "rare"
-                r["reasons"].append("该英雄几乎不选，数据不足")
-            else:
-                r["reasons"].append("暂无可靠数据")
+            r.update(verdict="nodata", basis="nodata")
+            r["reasons"].append("暂无可靠数据")
         results.append(r)
 
     # 正式服的新海克斯也沿用明确的显示口径；不改原始 win、局数、打分和首选规则。
@@ -288,13 +290,13 @@ def evaluate(store, hero_id: str | None, slots: list[str | None], k: int = 300) 
         aid = r.get("augment_id")
         g = global_augs.get(aid) or {}
         if ((store.augments.get(aid) or {}).get("new") and r.get("basis") == "hero_win"
-                and (r.get("games") or 0) < PBE_DISPLAY_MIN_GAMES and g.get("games")
+                and (r.get("games") or 0) < PBE_DISPLAY_MIN_GAMES and _supported(g.get("games"))
                 and g.get("win") is not None):
             r.update(display_win_scope="global", display_win=g["win"])
     scored = [r for r in results if r["score"] is not None]
     # 样本够不够按全体局数（选了分段时分数主要来自全体数据），没选分段就是本身的局数
-    hero_games = [r.get("games_all") or r.get("games") or 0 for r in scored if r.get("basis") == "hero_win"]
-    most = max(hero_games, default=0)
+    hero_sample_counts = [r.get("games_all") or r.get("games") or 0 for r in scored if r.get("basis") == "hero_win"]
+    most = max(hero_sample_counts, default=0)
     for r in scored:
         if r.get("basis") != "hero_win":
             continue
@@ -332,10 +334,10 @@ def evaluate(store, hero_id: str | None, slots: list[str | None], k: int = 300) 
                                       {"too_few": "样本太少，不可信"}.get(r["thin"], "样本偏少") for r in passed)
     if best is not None and best.get("basis") == "pbe":
         advice += "（测试服数据）"
-    if best is not None and best.get("basis") == "tier_only":
-        advice += "（没有胜率数据，按官方层级）"
+    if best is not None and best.get("basis") == "global_win" and hero_id:
+        advice += "（本英雄样本不足，按 all champs）"
     if not hero_id:
-        advice += "（未识别英雄，按全英雄数据）"
+        advice += "（未识别英雄，按 all champs）"
 
     pentakill = pentakill_rates(store, hero_id) if any(a in PENTAKILL for a in slots if a) else None
     return {
@@ -345,6 +347,6 @@ def evaluate(store, hero_id: str | None, slots: list[str | None], k: int = 300) 
         "pentakill": pentakill,
         "best_index": best["index"] if best else None,
         "advice": advice,
-        "sources": {"tencent_date": (hero or {}).get("date"), "win_source": label,
+        "sources": {"win_source": label,
                     "data_patch": (ag or {}).get("patch"), "patch": store.static.get("patch")},
     }

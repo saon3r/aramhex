@@ -66,8 +66,9 @@ def _scan_image(engine, path: str, hero: str | None) -> int:
     ev = recommend.evaluate(engine.store, hid, offer.slots, engine.settings.smoothing_games)
     out = {"size": [img.shape[1], img.shape[0]], "texts": offer.texts, "slots": offer.slots,
            "calibration": det.calibration.boxes if det.calibration else None,
-           "advice": ev["advice"],
-           "cards": [{k: r.get(k) for k in ("name", "rarity", "tier", "rank", "win", "games", "score", "verdict", "reasons")}
+           "advice": ev["advice"], "sources": ev["sources"],
+           "cards": [{k: r.get(k) for k in ("name", "rarity", "rank", "win", "games", "score", "verdict",
+                                            "basis", "rate_label", "source", "reasons")}
                      for r in ev["slots"]]}
     print(json.dumps(out, ensure_ascii=False, indent=2))
     return 0
