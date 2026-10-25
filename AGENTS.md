@@ -331,6 +331,10 @@ CommunityDragon paths to regenerate bundled tables; they never import Tencent en
 - **League has no custom FPS cap.** `FrameCapType` is a fixed enum (3=25, 4=30, 5=60, 6=80,
   7=120, 8=144, 9=200, 2=240, 10=uncapped). There is no 320 and no numeric field; a 320 cap
   would have to be a driver-level setting.
+- **`scripts/accept_packaged.py` needs no other instance running.** Its warm-start and
+  missing-recogniser checks launch the frozen app; if a dev `python -m lolhex` (or another
+  packaged copy) is alive, the frozen app exits silently on the single-instance guard and the
+  run scores 14/18 without a product fault. Stop every instance first.
 
 ## How we work
 
