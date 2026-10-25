@@ -31,10 +31,18 @@ The overlay never takes a click, never grabs focus, and disappears when the mome
 
 ## Install
 
-1. Download `AramHex-Portable-<version>.zip` from [Releases](../../releases/latest).
-2. Unzip it somewhere permanent — not your Downloads folder.
-3. Run `AramHex.exe`.
-4. First launch downloads the statistics (a few seconds). After that it works offline.
+Two ways, same app. The installer is easier if you want a Start Menu shortcut.
+
+**Installer** — download `AramHex-Setup-<version>.exe` from [Releases](../../releases/latest)
+and run it. It installs for the current user only, so it never asks for administrator
+rights, and Windows can remove it like any other program.
+
+**Portable** — download `AramHex-Portable-<version>.zip`, unzip it somewhere permanent (not
+your Downloads folder), and run `AramHex.exe`. Settings live in a `userdata` folder beside
+the exe, so the whole thing moves with the folder and deleting it is the uninstall.
+
+Either way, the first launch downloads the statistics (a few seconds). After that it works
+offline.
 
 Windows will show **"Windows protected your PC"** on first run, because the build is not
 code-signed. Click *More info* → *Run anyway*.
