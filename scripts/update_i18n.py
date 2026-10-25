@@ -23,7 +23,8 @@ ROOT = Path(__file__).resolve().parent.parent
 CD = "https://raw.communitydragon.org"
 DD = "https://ddragon.leagueoflegends.com"
 # 程序里的语言代码 → CommunityDragon 目录名
-LANGS = {"zh_CN": "zh_cn", "zh_TW": "zh_tw", "en_US": "en_us", "ja_JP": "ja_jp", "ko_KR": "ko_kr"}
+# ko_KR 不生成：韩服选项和韩文识别模型都已移除，名字表里留着也永远选不到
+LANGS = {"zh_CN": "zh_cn", "zh_TW": "zh_tw", "en_US": "en_us", "ja_JP": "ja_jp"}
 UI_KEYS = {"bench": "champion_bench_label", "pick": "subset-champions-grid-header"}
 
 

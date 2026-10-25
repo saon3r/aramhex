@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import json
 import logging
+import re
 import threading
 import time
 from pathlib import Path
@@ -149,24 +150,41 @@ def _usable_records(parsed, family: str) -> dict:
     return parsed
 
 
+_CJK = re.compile("[\u3040-\u30ff\u3400-\u9fff\uf900-\ufaff\uac00-\ud7af]")
+
+
+def _safe_display_name(value) -> str:
+    """旧缓存里的名字能不能直接显示：只接受非空、且不含中日韩文字的字符串。
+
+    兜底表（static_fallback.json）只有英文公开数据；旧腾讯缓存里的装备/召唤师技能名是中文，
+    带进英文界面就是漏中文，所以这类名字一律不带走，宁可显示占位符等下一次刷新。
+    """
+    if not isinstance(value, str):
+        return ""
+    name = value.strip()
+    return "" if not name or _CJK.search(name) else name
+
+
 def _carry_items(legacy: dict | None) -> dict[str, dict]:
     """旧缓存里的装备表：只带走能安全显示的部分。
 
     兜底表没有装备，重铺种子时丢掉会让装备名变成数字 ID；但旧版本可能存着腾讯的图标
-    地址（game.gtimg.cn），那类地址不再允许，一律清空，等下一次元数据刷新再补。
+    地址（game.gtimg.cn）和中文名，两样都不能带进英文界面，图标清空、名字不合规就跳过。
     """
     out: dict[str, dict] = {}
     for iid, rec in _records(_table(legacy).get("items")).items():
-        name = str(rec.get("name") or "").strip()
+        name = _safe_display_name(rec.get("name"))
         if not name:
             continue
-        key = str(rec.get("id") or iid)
+        raw_id = rec.get("id")
+        key = str(raw_id) if isinstance(raw_id, (str, int)) else str(iid)
         icon = str(rec.get("icon") or "")
+        price = rec.get("price")
         out[key] = {
             "id": key,
             "name": name,
             "desc": str(rec.get("desc") or rec.get("plaintext") or ""),
-            "price": rec.get("price"),
+            "price": price if isinstance(price, (int, float)) and not isinstance(price, bool) else None,
             "icon": icon if icon.startswith(metadata.DDRAGON_BASE + "/") else "",
         }
     return out
@@ -232,7 +250,10 @@ def _seed_static(legacy: dict | None = None) -> dict:
         if str(name).strip():
             spells[str(sid)] = {"id": str(sid), "name": str(name).strip(), "icon": ""}
     for sid, rec in _records(legacy.get("spells")).items():
-        spells.setdefault(sid, {"id": sid, "name": f"Spell {sid}", "icon": ""})
+        # 兜底表只有 8 个常用召唤师技能；其余 ID 保留旧缓存里的英文名（丢掉就只剩占位符），
+        # 但旧腾讯缓存的中文名不带进英文界面。
+        spells.setdefault(sid, {"id": sid, "name": _safe_display_name(rec.get("name")) or f"Spell {sid}",
+                                "icon": ""})
 
     items = _carry_items(legacy)
 
