@@ -1,4 +1,4 @@
-name: 发布
+name: Release
 
 on:
   push:
@@ -21,41 +21,41 @@ jobs:
       - uses: actions/checkout@v5
       - uses: actions/setup-python@v6
         with:
-          python-version: "3.13.16"  # 和 1.0.0 一样，打包后的运行环境保持一致
+          python-version: "3.13.16"  # same runtime as the 1.0.0 build, so packaged output stays comparable
           cache: pip
-      - name: 安装依赖
+      - name: Install dependencies
         run: python -m pip install -r requirements-build.txt
 
-      - name: 核对版本号
+      - name: Check version matches the tag
         run: |
           $version = (python -c "import lolhex; print(lolhex.__version__)").Trim()
-          if ("v$version" -ne "${{ github.ref_name }}") { throw "tag ${{ github.ref_name }} 和 __version__ $version 不一致" }
+          if ("v$version" -ne "${{ github.ref_name }}") { throw "tag ${{ github.ref_name }} does not match __version__ $version" }
 
-      - name: 更新内置统计数据
+      - name: Refresh bundled statistics
         env:
           GITHUB_TOKEN: ${{ secrets.DATA_REPO_TOKEN }}
         run: |
-          # 取最新的统计数据；取不到就用仓库里已提交的内置数据
-          try { python scripts/update_data.py } catch { Write-Warning "取不到最新数据，用已提交的内置数据：$_" }
-          if ($LASTEXITCODE) { Write-Warning "取不到最新数据，用已提交的内置数据"; $global:LASTEXITCODE = 0 }
+          # Take the newest statistics; if that fails, keep the bundled data already committed.
+          try { python scripts/update_data.py } catch { Write-Warning "could not fetch latest data, using the committed bundle: $_" }
+          if ($LASTEXITCODE) { Write-Warning "could not fetch latest data, using the committed bundle"; $global:LASTEXITCODE = 0 }
 
-      - name: 测试
+      - name: Test
         env:
           QT_QPA_PLATFORM: offscreen
         run: python -m pytest -q
 
-      - name: 安装 Inno Setup
+      - name: Install Inno Setup
         run: choco install innosetup --no-progress -y
 
-      - name: 打包
+      - name: Build
         run: pwsh -NoProfile -File packaging/build.ps1 -PythonExe python
 
-      - name: 发布说明
+      - name: Generate release notes
         run: python scripts/release_notes.py "${{ github.ref_name }}" > build/release-notes.md
 
-      - name: 建 Release
+      - name: Create release
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
           $files = Get-ChildItem build/release | ForEach-Object { $_.FullName }
-          gh release create "${{ github.ref_name }}" @files --title "海克斯大乱斗助手 ${{ github.ref_name }}" --notes-file build/release-notes.md
+          gh release create "${{ github.ref_name }}" @files --title "AramHex ${{ github.ref_name }}" --notes-file build/release-notes.md
