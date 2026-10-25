@@ -132,7 +132,9 @@ Fanning out is allowed; shared state is not.
 - **Milestone 5 — verified (issue #6).** One-folder PyInstaller build plus the portable ZIP
   (75 MB); `scripts/accept_packaged.py` runs the frozen app with no Python on PATH and passes
   **18/18**, including "no module loaded from outside the install", fixture OCR to three
-  badges, English chrome, the crash dialog and the missing-recognizer message. Evidence:
+  badges, English chrome, the crash dialog and the missing-recognizer message; the
+  packaged EXE also played one full live game (champion select, 17 offers, three
+  badges, zero errors). Evidence:
   `docs/superpowers/verification/2026-10-25-milestone-5-packaging.md`.
 - **Milestone 3 — verified (issue #4).** OCR is now Windows.Media.Ocr: 3.4-4.2 ms per
   three-card tick and 57-63 ms per 4K full scan (RapidOCR: 32-34 ms and 758-953 ms), 75 MB
