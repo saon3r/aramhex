@@ -23,21 +23,26 @@ The packaged checks cover:
 
 ## v1.1.4 release gate
 
-Candidate `1c963e3`, checked on 25 October 2026:
+Code candidate `1ba49e6`, rebuilt and checked on 25 October 2026:
 
 | Gate | Result |
 |---|---|
-| Complete offscreen test suite | 614 passed |
+| Complete offscreen test suite | 622 passed |
 | Traversal rejection and nested manifest filenames | Regression tests pass, including `..\..\evil.json` and `patches/16.21/normal/heroes.json` |
 | Ordinary stats refresh | Pass; fresh-home run downloaded the real 16.21 pack, revision `d745511cb712`, 5,141,715 matches |
 | Native Windows source fixture/self-test | Pass; English UI, correct three cards and three ordered in-bounds badges |
-| Fresh local v1.1.4 portable build | Pass; unzipped note is English, manual-update wording, this fork's release URL |
+| Fresh local v1.1.4 portable build | Pass; unzipped note is English, points to this fork, and says to copy `userdata` into the new folder before deleting the old folder |
 | Fresh v1.1.4 frozen acceptance | 18/18 passed, without Python on PATH |
-| Independent security/privacy review | Pending |
+| Independent security/privacy review | Approved; scoped re-review confirms safe portable upgrades, Windows OCR-pack notice and both-folder screenshot gate |
 | Ordinary non-debug live game; `shots/` and `screenshots/` unchanged | Pending; snapshot names, sizes and modification times in both folders before launch and after the game; verify no `debug.txt` in the application or data directory |
 
 This is not yet a release approval. No tag may be created until the remaining gates
 pass on the final candidate. A revised candidate must be rebuilt and rechecked.
+
+Local ZIP SHA-256:
+`911fb2c60aa254871f2fb1d2e5ff740e0bd099a1737f276eb1351a60437a1c55`.
+The frozen acceptance was rerun after the final code/portable-note corrections;
+the earlier candidate's acceptance is not being reused.
 
 These checks do not certify anti-cheat approval or every possible Windows/monitor
 configuration. The executable is unsigned. Installed upgrades retain private settings
