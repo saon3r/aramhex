@@ -1,61 +1,110 @@
-# AramHex 海克斯大乱斗助手
+# ARAM: Mayhem Overlay
 
-英雄联盟国服「海克斯大乱斗」桌面助手。官网：[aramhex.com](https://aramhex.com)
+An overlay for League of Legends **ARAM: Mayhem** that answers the two questions the mode
+makes you guess: *which champion should I take?* and *which of these three augments?*
 
-- **英雄胜率**：选英雄时自动认出你和队友的英雄，显示胜率和评级。
-- **海克斯胜率**：三选一时按本英雄的海克斯胜率推荐。
-- **召唤师技能与装备**：按自采统计的胜率排序，只放图标。
-- **分段**：支持娱乐、中分、前 5%。当前统计未提供分段时，统一使用全体样本，并显示实际口径。
-- **外服**：繁中客户端（台服等）不用设置直接能用；日服、美服、欧服在设置里选游戏语言。识别用的是 Windows 自带的文字识别，非英文客户端要先在 Windows 里装对应语言的识别包，否则那一局不会有标签（日志里会写明缺哪个语言包）。
+It reads your screen, looks up real statistics for the current patch, and draws the answer
+next to the thing you are choosing.
 
-只截屏识别，不连接游戏客户端或对局接口，不读取游戏进程和内存，不注入、不模拟按键。
+![Three augment cards, each badged with its win rate for the champion being played](docs/assets/augment-cards.jpg)
 
-## 下载
+---
 
-- 官网：[aramhex.com](https://aramhex.com)
-- GitHub：[Releases](https://github.com/czgreat/aramhex/releases)
-  - `AramHex-Setup-<版本>.exe`：安装版
-  - `AramHex-Portable-<版本>.zip`：便携版，解压就能用
+## What it does
 
-游戏要设成**无边框**或**窗口化**。Windows 提示「已保护你的电脑」时，点「更多信息」→「仍要运行」。
+**Champion select** — every champion in the "Available Champions" bench, plus your team's
+picks, gets a letter grade, a win rate and a rank out of 173.
 
-排查问题时，可在 `AramHex.exe` 旁或数据目录里放一个空的 `debug.txt`，从托盘退出后重新打开。它只是调试开关，日志写在数据目录的 `aramhex.log`：便携版是程序旁的 `userdata`，安装版是 `%APPDATA%\AramHex`。请确认文件不是 `debug.txt.txt`；删除标记并重启可关闭调试。
+![The Available Champions bench with a tier and win rate under every champion](docs/assets/champion-select.jpg)
 
-## 隐私
+**Augment selection** — when the three cards appear, each one is badged with its win rate
+**for the champion you are actually playing**, not a global average. The best card is
+highlighted, weak cards say so, and a reroll updates the badges.
 
-本程序不上报任何使用统计、身份标识或诊断日志，也不联网检查更新。详见[隐私声明](PRIVACY.md)。
+| Card | Verdict | Sample |
+|---|---|---|
+| Escape Plan | **Best** | 58.4% over 1,041 games |
+| Goredrink | Viable | 57.6% |
+| Snowday | Consider reroll | 50.0% |
 
-## 数据
+The overlay never takes a click, never grabs focus, and disappears when the moment passes.
 
-- 胜率统计：自采对局，见 [aramhex-data](https://github.com/czgreat/aramhex-data)（CC BY-NC 4.0）。只统计采集到的对局，不是全服数据。
-- 在线查询：[aramhex.com/data](https://aramhex.com/data/) 可以按英雄或按海克斯查看。某个英雄每个海克斯的胜率打开 `https://aramhex.com/data/hero/英雄名/`（如 [亚索](https://aramhex.com/data/hero/%E4%BA%9A%E7%B4%A2/)），某个海克斯在每个英雄上的胜率打开 `https://aramhex.com/data/augment/海克斯名/`（如 [秘术冲拳](https://aramhex.com/data/augment/%E7%A7%98%E6%9C%AF%E5%86%B2%E6%8B%B3/)）。
-- 英雄、海克斯、装备图标和英文名：Data Dragon / CommunityDragon 公开数据（拳头）。
+## Install
 
-## 从源码运行
+1. Download `AramHex-Portable-<version>.zip` from [Releases](../../releases/latest).
+2. Unzip it somewhere permanent — not your Downloads folder.
+3. Run `AramHex.exe`.
+4. First launch downloads the statistics (a few seconds). After that it works offline.
 
-Windows 10/11 64 位，Python 3.13：
+Windows will show **"Windows protected your PC"** on first run, because the build is not
+code-signed. Click *More info* → *Run anyway*.
+
+**Requirements:** Windows 10/11 64-bit, League set to borderless or windowed (exclusive
+fullscreen cannot be overlaid), and an English client.
+
+## How it works
+
+It reads pixels. That is the whole trick, and it is deliberate:
+
+- **No memory reading, no injection, no packet capture, no input synthesis.** Anti-cheat
+  never has a reason to care.
+- **Screen capture plus Windows' own OCR** (`Windows.Media.Ocr`, the engine already on your
+  machine) reads the card titles in about **4 ms** for all three.
+- The recognised name is matched against the mode's augment list, then looked up in the
+  statistics for your champion.
+
+Outbound traffic is four anonymous HTTPS hosts, documented in
+[`AGENTS.md`](AGENTS.md#runtime-network-hosts): the statistics pack, its fallback mirror,
+and Riot's own Data Dragon / CommunityDragon asset CDNs. No account, no identifier, no
+telemetry of any kind.
+
+## Honest limitations
+
+**The statistics are the Chinese server's.** Riot blocks ARAM: Mayhem in their public API,
+so nobody has EUW data — every site showing "Mayhem stats" is either borrowing Arena numbers
+or crawling the client. The dataset here is 5.1M real Mayhem games from seven CN regions on
+the live patch. Champion strength differs by region; augment strength travels better.
+Everything in the app is labelled accordingly.
+
+**The augment screen's layout is measured against the current UI.** If Riot restyles it, the
+badges stop appearing. There is an open issue to make that failure visible instead of silent.
+
+**It needs an English client.** The OCR engine needs Windows' `en-GB` recogniser pack; the
+app logs a clear message if it is missing rather than silently misreading.
+
+**Not affiliated with Riot Games.** Personal, non-commercial project. Riot's developer policy
+does not approve published augment win-rate overlays, which is why this is a personal tool
+and not a product.
+
+## Build from source
+
+Requires Python 3.13.
 
 ```powershell
-python -m venv .venv
-.venv\Scripts\pip install -r requirements.txt
-.venv\Scripts\python -m lolhex
-.venv\Scripts\python -m pytest
+py -3.13 -m venv .venv
+.venv\Scripts\python.exe -m pip install -r requirements.txt
+.venv\Scripts\python.exe -m lolhex
 ```
 
-打包和发版见 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)。
-
-## 自己打包
+Tests:
 
 ```powershell
-powershell -NoProfile -File packaging\build.ps1 -PortableOnly
+$env:QT_QPA_PLATFORM = 'offscreen'; .venv\Scripts\python.exe -m pytest -q
 ```
 
-产物在 `build/release/`：`AramHex-Portable-<版本>.zip`（一个文件夹，解压即用，不是单文件）。
-程序没有签名，Windows 可能提示「已保护你的电脑」：点「更多信息」→「仍要运行」。这是正常的，
-不要为此关掉 SmartScreen。识别用的是 Windows 自带的文字识别，非英文客户端要先装对应语言的识别包。
+Packaging: `packaging/build.ps1` produces a one-folder build and a portable ZIP.
 
-## 协议
+## Credits
 
-程序代码 [MIT](LICENSE)；统计数据 [CC BY-NC 4.0](https://github.com/czgreat/aramhex-data/blob/main/LICENSE)；第三方组件见 [NOTICE.md](NOTICE.md)。
+Built on [`czgreat/aramhex`](https://github.com/czgreat/aramhex) (MIT), whose vision
+pipeline, overlay layers and layout constants this fork inherits. Statistics from
+[`czgreat/aramhex-data`](https://github.com/czgreat/aramhex-data) (CC BY-NC 4.0). Champion,
+augment and item metadata from Riot's Data Dragon and CommunityDragon.
 
-非官方工具，和腾讯、Riot Games 没有关系。
+The fork removed upstream's telemetry, cloud configuration, self-update and Tencent data
+sources, replaced RapidOCR with Windows' own engine, and localised the interface. The design
+and every measurement behind those decisions live in
+[`docs/superpowers/specs/`](docs/superpowers/specs/).
+
+League of Legends and Riot Games are trademarks of Riot Games, Inc. This project is not
+endorsed by or affiliated with Riot Games.
