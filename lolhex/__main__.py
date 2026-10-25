@@ -57,7 +57,8 @@ def _scan_image(engine, path: str, hero: str | None) -> int:
         return 2
     engine.store.refresh()
     from .engine import augment_matcher
-    det = AugmentDetector(augment_matcher(engine.store, engine.settings))
+    det = AugmentDetector(augment_matcher(engine.store, engine.settings),
+                         game_lang=getattr(engine.settings, "game_lang", "en_US"))
     offer = det.scan_full(img)
     if not offer:
         print("没有识别到三选一画面。")

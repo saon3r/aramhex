@@ -174,7 +174,11 @@ class Engine:
         self.settings.game_lang = i18n.normalize_lang(lang)
         self._hm = None
         self._cs_memo = None
+        from .vision.ocr import reset_engines
+        reset_engines()  # 换语言要重新挑识别器，别复用旧语言的缓存
         if self._detector:
+            # 检测器自己记着语言：只清 _ocr 会让它用旧语言的引擎重建
+            self._detector.game_lang = self.settings.game_lang
             self._detector._ocr = None
             self._detector.set_matcher(self._augment_matcher())
         self.rescan()

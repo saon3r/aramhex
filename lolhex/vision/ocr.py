@@ -146,14 +146,15 @@ _engines_lock = threading.Lock()
 
 
 def _build_engine(wanted: str, game_lang: str):
-    if wanted != "rapid":
+    if not wanted.startswith("rapid"):
         try:
             from .ocr_win import WinOCR
 
             inst = WinOCR(game_lang)
             log.info("OCR 引擎：Windows.Media.Ocr（%s）", inst.language)
             return inst
-        except Exception as e:  # 没有对应语言的识别包、WinRT 装不上：退回内置模型
+        except (ImportError, OSError, RuntimeError) as e:
+            # OcrUnavailable / 没装 winrt：退回内置模型。其他异常（代码 bug）照常抛出。
             log.warning("Windows OCR 用不了（%s），这次用 RapidOCR", e)
     return OCR.get()
 

@@ -40,6 +40,18 @@ class OcrUnavailable(RuntimeError):
     """这台机器没有可用的 Windows OCR 引擎（缺语言包等）。"""
 
 
+def _language_matches(tag: str, wanted) -> bool:
+    """语言标签是否对得上：完全一致，或者主语言一致（en-US 对 en-GB、zh-Hans-CN 对 zh-CN）。"""
+    got = (tag or "").lower()
+    if not got:
+        return False
+    for want in wanted:
+        want = want.lower()
+        if got == want or got.split("-")[0] == want.split("-")[0]:
+            return True
+    return False
+
+
 def available_languages() -> list[str]:
     from winrt.windows.media.ocr import OcrEngine
 
@@ -53,8 +65,8 @@ class WinOCR:
         from winrt.windows.globalization import Language
         from winrt.windows.media.ocr import OcrEngine
 
-        engine = None
         tags = LANG_TAGS.get(game_lang or "", ())
+        engine = None
         for tag in tags:
             try:
                 engine = OcrEngine.try_create_from_language(Language(tag))
@@ -63,14 +75,17 @@ class WinOCR:
             if engine is not None:
                 break
         if engine is None:
-            # 客户端语言的包没装：用系统里已有的那个（至少英文名字还能认）
-            engine = OcrEngine.try_create_from_user_profile_languages()
-        if engine is None:
+            # 客户端语言的识别包没装就不要拿别的语言凑数：英文引擎认不了中文卡面，
+            # 结果是一张卡都认不出，而且看起来像「OCR 坏了」。抛出去让上层退回 RapidOCR。
             raise OcrUnavailable(
                 f"no Windows OCR recognizer for {game_lang!r}; installed: {available_languages()}")
+        got = engine.recognizer_language.language_tag
+        if not _language_matches(got, tags):
+            raise OcrUnavailable(
+                f"Windows OCR gave {got!r} for {game_lang!r}; installed: {available_languages()}")
         self._engine = engine
         self._lock = threading.Lock()
-        self.language = engine.recognizer_language.language_tag
+        self.language = got
 
     # ---------- WinRT 异步 → 同步 ----------
     @staticmethod
@@ -109,7 +124,10 @@ class WinOCR:
             bgra[:, :, :3] = img
             bgra[:, :, 3] = 255
         elif img.shape[2] == 4:
-            bgra = img
+            # 4 通道：alpha 一律拉满。带 alpha 的截图按 PREMULTIPLIED 解释时，
+            # alpha=0 的像素会变成全黑，认不出来
+            bgra = img.copy()
+            bgra[:, :, 3] = 255
         else:
             raise ValueError(f"unsupported image shape {img.shape}")
         bgra = np.ascontiguousarray(bgra, dtype=np.uint8)

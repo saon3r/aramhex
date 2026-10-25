@@ -57,3 +57,43 @@ def test_same_language_reuses_one_engine():
 
     assert ocr.get_ocr("en_US") is ocr.get_ocr("en_US")
     assert ocr.get_ocr("en_US") is not ocr.get_ocr("zh_CN")
+
+def test_missing_language_pack_never_uses_a_wrong_script_engine():
+    """中文/日文客户端但没装对应识别包时，必须退回 RapidOCR，不能拿英文引擎凑数。
+
+    英文引擎认不了中文卡面，结果是一张卡都认不出——看起来就像「OCR 坏了」。
+    """
+    from lolhex.vision import ocr
+
+    inst = ocr.get_ocr("zh_CN")
+    if type(inst).__name__ == "WinOCR":
+        assert inst.language.lower().startswith("zh"), f"中文客户端拿到 {inst.language}"
+    else:
+        assert type(inst).__name__ == "OCR"
+
+
+def test_winocr_refuses_a_mismatched_recognizer():
+    from lolhex.vision import ocr_win
+
+    installed = [tag.lower() for tag in ocr_win.available_languages()]
+    if any(tag.startswith("zh") for tag in installed):
+        pytest.skip("这台机器装了中文识别包，构造不出「语言包缺失」")
+    with pytest.raises(ocr_win.OcrUnavailable):
+        ocr_win.WinOCR("zh_CN")
+
+
+def test_language_switch_reaches_the_detector(store, tmp_path):
+    """设置里换语言后，检测器下次重建必须用新语言，不能留着构造时的旧语言。"""
+    from types import SimpleNamespace
+
+    from lolhex.config import Settings
+    from lolhex.engine import Engine
+    from lolhex.vision.ocr import get_ocr
+
+    engine = Engine(Settings(), home=tmp_path, store=store)
+    engine._detector = SimpleNamespace(game_lang="en_US", _ocr=get_ocr("en_US"),
+                                       set_matcher=lambda _m: None, _last_fp=object())
+    engine.set_game_lang("zh_CN")
+    assert engine.settings.game_lang == "zh_CN"
+    assert engine._detector.game_lang == "zh_CN", "检测器还在用旧语言"
+    assert engine._detector._ocr is None, "换语言后要重建识别器"

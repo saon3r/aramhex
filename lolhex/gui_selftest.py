@@ -10,7 +10,7 @@ from pathlib import Path
 
 
 def _vision_check() -> dict:
-    """OpenCV 的图片处理和 RapidOCR 的检测、识别：画一行字，再认出来。"""
+    """OpenCV 的图片处理和当前 OCR 后端（默认 Windows 引擎）的检测、识别：画一行字，再认出来。"""
     import cv2
     import numpy as np
 
@@ -19,8 +19,8 @@ def _vision_check() -> dict:
     ok, buf = cv2.imencode(".png", img)
     img = cv2.imdecode(buf, cv2.IMREAD_COLOR)
     img = cv2.resize(img, None, fx=1.0, fy=1.0, interpolation=cv2.INTER_AREA)
-    from .vision.ocr import OCR
-    ocr = OCR.get()
+    from .vision.ocr import get_ocr
+    ocr = get_ocr()  # 打包后的自检要走默认后端，别只检查老朋友
     text, score = ocr.recognize(img)
     lines = ocr.detect(img)
     return {"ocr_text": text, "ocr_score": round(score, 3), "ocr_lines": [ln.text for ln in lines],
