@@ -61,9 +61,8 @@ It reads pixels. That is the whole trick, and it is deliberate:
 - The recognised name is matched against the mode's augment list, then looked up in the
   statistics for your champion.
 
-Outbound traffic is four anonymous HTTPS hosts, documented in
-[`AGENTS.md`](AGENTS.md#runtime-network-hosts): the statistics pack, its fallback mirror,
-and Riot's own Data Dragon / CommunityDragon asset CDNs. No account, no identifier, no
+Outbound traffic is four anonymous HTTPS hosts — the statistics pack, its fallback mirror,
+and Riot's own Data Dragon and CommunityDragon asset CDNs. No account, no identifier, no
 telemetry of any kind.
 
 ## Honest limitations
@@ -110,9 +109,7 @@ pipeline, overlay layers and layout constants this fork inherits. Statistics fro
 augment and item metadata from Riot's Data Dragon and CommunityDragon.
 
 The fork removed upstream's telemetry, cloud configuration, self-update and Tencent data
-sources, replaced RapidOCR with Windows' own engine, and localised the interface. The design
-and every measurement behind those decisions live in
-[`docs/superpowers/specs/`](docs/superpowers/specs/).
+sources, replaced RapidOCR with Windows' own engine, and localised the interface.
 
 League of Legends and Riot Games are trademarks of Riot Games, Inc. This project is not
 endorsed by or affiliated with Riot Games.

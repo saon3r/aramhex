@@ -9,3 +9,10 @@ lolhex/data/bundled.new/
 
 # our local captures and scratch
 screenshots/
+
+# Internal working notes and agent instructions. Kept on disk so tooling can
+# read them; never published.
+AGENTS.md
+CLAUDE.md
+.opencode/
+docs/superpowers/
