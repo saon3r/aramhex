@@ -85,9 +85,9 @@ def _resize(img: np.ndarray, scale: float) -> np.ndarray:
 def detect_scale(band_width: int) -> float:
     """扫描带 → 送进 OCR 的缩放。固定宽度，放大缩小都做。
 
-    以前这里只缩小（min(1.0, …)）：2560/4K 的带子缩到 1600，1600/1366 原样送，
-    1920 送 1459，同一个卡面在每个分辨率下喂给识别引擎的像素都不同，1080p 就出现了
-    别的分辨率没有的识别失败。现在每个分辨率都得到 DETECT_MAX_W 宽、同样清晰度的像素。
+    以前这里只缩小（min(1.0, …)）：4K/2560 缩到 1600，1920 送 1459，1600 送 1216，
+    1366 送 1039。同一个卡面在每个分辨率下喂给识别引擎的像素都不一样；1366 下实测
+    整张卡都认不出来（issue #22）。现在每个分辨率都得到 DETECT_MAX_W 宽。
     """
     return DETECT_MAX_W / max(1, band_width)
 
@@ -95,15 +95,17 @@ def detect_scale(band_width: int) -> float:
 def fit_width(img: np.ndarray, width: int) -> np.ndarray:
     """把图缩放到恰好 width 宽（高度按比例）。缩小时用 AREA 防混叠，放大时用 LANCZOS4。
 
-    放大用 LANCZOS4 是量出来的：在一局真实的 17 张卡面截图里，CUBIC / LINEAR 放大都会让
-    1600×900 那一档偶发少认出卡，LANCZOS4 四档全对。
+    放大用 LANCZOS4 是量出来的：在一局真实游戏的 14 张有效卡面截图里，CUBIC / LINEAR
+    放大都会让 1600×900 那一档偶发少认出卡，LANCZOS4 四档全对。高度用截断而不是四舍
+    五入：4K 下和改动前的小数缩放得到完全相同的 1600×887，本机 4K 的识别像素一个字节
+    都没变。
     """
     import cv2
     h, w = img.shape[:2]
     if w == width:
         return img
     interp = cv2.INTER_AREA if width < w else cv2.INTER_LANCZOS4
-    return cv2.resize(img, (width, max(1, round(h * width / max(1, w)))), interpolation=interp)
+    return cv2.resize(img, (width, max(1, int(h * width / max(1, w)))), interpolation=interp)
 
 
 def fingerprint(img: np.ndarray) -> np.ndarray:

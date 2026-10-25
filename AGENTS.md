@@ -123,9 +123,13 @@ Fanning out is allowed; shared state is not.
 - **All milestones closed.** #2/#3/#4/#6 verified (#4 is milestone 3, #6 is milestone 5);
   #11/#12 follow-ups done. **#5 (client API) was rejected as not planned** — the champion
   offer is not in the champ-select session, recorded in the design doc so it is not
-  re-proposed. The only open issue is **#18 (low priority)**: make "cards on screen, nothing
-  recognised" visible instead of silent, because the layout constants are measured against
-  today's augment screen and a Riot restyle would look like a broken app.
+  re-proposed. **#22 (1080p recognition)** is closed: the live 1920×1080 window never failed
+  (the report was a downscaled still), but the full scan did feed the OCR different pixels
+  per resolution and lost cards at 1366; it now normalises to a fixed 1600 px. Evidence:
+  `docs/superpowers/verification/2026-10-25-issue-22-1080p.md`. The only open issue is
+  **#18 (low priority)**: make "cards on screen, nothing recognised" visible instead of
+  silent, because the layout constants are measured against today's augment screen and a
+  Riot restyle would look like a broken app.
 - **Milestone 1 — verified.** Upstream runs unmodified on this client. The augment screen
   is proven against `tests/fixtures/real-mayhem-augment-screen.png`; the app launches.
   Champion select was the one unchecked item and was verified live in milestone 2.
@@ -310,6 +314,23 @@ CommunityDragon paths to regenerate bundled tables; they never import Tencent en
 - **WinRT line boxes are per word.** `line.words[0].bounding_rect` is the first word only;
   union all word rectangles or `pick_my_hero`'s text-height heuristic (and card x-extents)
   get the wrong numbers.
+- **The League client does not reliably accept a scripted window resize.** `SetWindowPos`
+  changed the window frame but the client kept painting its old surface: a 1920×1080 window
+  showing a 1600×900 UI, or a 2880×1620 window with the old 1920×1080 UI clipped and a white
+  band. That is what "the client looks weird" was. Sending `WM_ENTERSIZEMOVE` (0x0231) and
+  `WM_EXITSIZEMOVE` (0x0232) around the resize makes it reflow — but even then it sometimes
+  refuses, so always verify: the content's non-black extent must equal the window, and if it
+  does not, put the original size back. On this 4K/150%-scale machine the client's honest
+  size is 1600×900 physical; 1920×1080 physical renders clipped. Do not script client
+  resizes during a live acceptance unless the owner accepts the risk.
+- **`game.cfg` `Width`/`Height` in windowed mode are the window size, not the client area.**
+  `WindowMode=1, Width=1920, Height=1080` produced a 1904×993 client area (16 px borders,
+  39 px title bar). For an exact 1920×1080 render, `SetWindowPos` the game window to the
+  client size plus the measured frame, then check `vision.window.client_rect` before
+  capturing; games do re-render on resize.
+- **League has no custom FPS cap.** `FrameCapType` is a fixed enum (3=25, 4=30, 5=60, 6=80,
+  7=120, 8=144, 9=200, 2=240, 10=uncapped). There is no 320 and no numeric field; a 320 cap
+  would have to be a driver-level setting.
 
 ## How we work
 
