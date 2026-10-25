@@ -1,4 +1,12 @@
-# 更新记录
+# Changelog
+
+## 1.1.3
+
+- The Windows installer is English throughout: the wizard, the Start Menu folder, both shortcut names, the uninstall entry, and the name shown in Apps & features. All of it was still Chinese, inherited from upstream.
+- The installer's publisher and its help/update links point at this repository instead of upstream's.
+- The release workflow is English, so future releases no longer publish Chinese titles and notes.
+
+No changes to the application itself.
 
 ## 1.1.2
 
