@@ -7,6 +7,15 @@ mss==10.2.0
 opencv-python==5.0.0.93
 rapidocr==3.9.2
 onnxruntime==1.30.0
+# Windows.Media.Ocr：系统自带的识别引擎，OCR 的默认后端（RapidOCR 留作后备，对局通过后删除）
+winrt-runtime==4.0.3
+winrt-Windows.Foundation==4!10.0.28000.2705
+winrt-Windows.Foundation.Collections==4!10.0.28000.2705
+winrt-Windows.Globalization==4!10.0.28000.2705
+winrt-Windows.Graphics.Imaging==4!10.0.28000.2705
+winrt-Windows.Media.Ocr==4!10.0.28000.2705
+winrt-Windows.Security.Cryptography==4!10.0.28000.2705
+winrt-Windows.Storage.Streams==4!10.0.28000.2705
 PySide6-Essentials==6.11.2
 # 测试
 pytest

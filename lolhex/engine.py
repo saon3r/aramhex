@@ -87,7 +87,6 @@ class Engine:
                                      transport=transport)
         if hasattr(self.store, "set_band"):
             self.store.set_band(settings.data_band or None)
-        self._apply_rec_model()
         self._lock = threading.RLock()
         self._stop = threading.Event()
         self._data_wake = threading.Event()  # 对局结束时叫醒数据线程：对局中推迟的数据更新马上补上
@@ -171,9 +170,8 @@ class Engine:
         self._rescan.set()
 
     def set_game_lang(self, lang: str) -> None:
-        """设置里换了游戏语言：换认字用的名字表（韩服再换识别模型），选人界面的缓存作废。"""
+        """设置里换了游戏语言：换认字用的名字表和识别语言，选人界面的缓存作废。"""
         self.settings.game_lang = i18n.normalize_lang(lang)
-        self._apply_rec_model()
         self._hm = None
         self._cs_memo = None
         if self._detector:
@@ -181,11 +179,6 @@ class Engine:
             self._detector.set_matcher(self._augment_matcher())
         self.rescan()
         log.info("游戏语言：%s", self.settings.game_lang)
-
-    def _apply_rec_model(self) -> None:
-        from .vision.ocr import OCR
-        # 韩服识别模型下载（langpack）已移除，韩服选项也去掉了：始终使用内置识别模型。
-        OCR.use_rec_model(None)
 
     def reset_calibration(self) -> None:
         if self._detector:
@@ -230,12 +223,12 @@ class Engine:
         try:
             self._load_icons(download=False)
             import numpy as np
-            from .vision.ocr import OCR
+            from .vision.ocr import get_ocr
             import cv2
             sample = np.full((64, 256, 3), 255, np.uint8)
             cv2.putText(sample, "LolHex 123", (8, 44), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 0), 2)
-            OCR.get().recognize(sample)  # 首次推理最慢，识别和检测都先各跑一次
-            OCR.get().detect(sample)
+            get_ocr(self.settings.game_lang).recognize(sample)  # 首次推理最慢，两边都先各跑一次
+            get_ocr(self.settings.game_lang).detect(sample)
         except Exception:
             log.exception("预热失败")
 
@@ -387,8 +380,8 @@ class Engine:
         """客户端截图 → 标注数据 {"bench", "team", "mine", "cards"?}；
         不在选英雄界面返回 False，在界面但什么都没认出返回 None。"""
         from .vision import champselect
-        from .vision.ocr import OCR
-        ocr = OCR.get()
+        from .vision.ocr import get_ocr
+        ocr = get_ocr(self.settings.game_lang)
         if self._cs_memo is None:
             self._cs_memo = champselect.Memo()
         memo = self._cs_memo
@@ -434,8 +427,8 @@ class Engine:
         return got
 
     def _read_hero_name(self, crop) -> str | None:
-        from .vision.ocr import OCR
-        txt, sc = OCR.get().recognize(crop)
+        from .vision.ocr import get_ocr
+        txt, sc = get_ocr(self.settings.game_lang).recognize(crop)
         return self._hero_by_name(txt) if sc >= 0.6 else None
 
     def _hero_by_name(self, txt: str) -> str | None:
@@ -446,11 +439,11 @@ class Engine:
 
     def _champ_select_ocr(self, img) -> None:
         from .vision.detector import _resize
-        from .vision.ocr import OCR
+        from .vision.ocr import get_ocr
         scale = min(1.0, 1600 / max(1, img.shape[1]))
         m = self._hero_matcher()
         found = []
-        for ln in OCR.get().detect(_resize(img, scale)):
+        for ln in get_ocr(self.settings.game_lang).detect(_resize(img, scale)):
             if len(normalize(ln.text)) < 2:  # 整屏什么字都有：单独一个字（聊天、名字里的）不当英雄名，「慎」「劫」靠头像认
                 continue
             key, sc = m.match(ln.text)
@@ -512,7 +505,8 @@ class Engine:
                 continue
             if self._detector is None:
                 self._detector = AugmentDetector(self._augment_matcher(), self.home / "calibration.json",
-                    rarities={aid: a.get("rarity") for aid, a in self.store.augments.items()})
+                    rarities={aid: a.get("rarity") for aid, a in self.store.augments.items()},
+                    game_lang=self.settings.game_lang)
             det = self._detector
             det.ensure_calibration(rect.width, rect.height)
             now = time.monotonic()

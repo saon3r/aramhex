@@ -25,6 +25,9 @@ def test_matcher_tolerates_ocr_noise():
 
 rapidocr = pytest.importorskip("rapidocr")
 synth = pytest.importorskip("synth")
+# 这些用例用合成中文卡面测检测器的几何逻辑，所以固定用能认中文的 RapidOCR；
+# 默认后端是 Windows 引擎（en-GB 识别器），认不了合成中文。
+from lolhex.vision.ocr import OCR  # noqa: E402
 if not synth.fonts_available():
     pytest.skip("没有中文字体，跳过合成画面测试", allow_module_level=True)
 
@@ -32,7 +35,7 @@ if not synth.fonts_available():
 @pytest.fixture(scope="module")
 def detector():
     from lolhex.vision.detector import AugmentDetector
-    return AugmentDetector(NameMatcher(NAMES))
+    return AugmentDetector(NameMatcher(NAMES), ocr=OCR.get())
 
 
 def names(offer):
@@ -78,7 +81,7 @@ def test_default_calibration_reads_first_offer(tmp_path, size):
     """没校准过也能直接走轻量检查；三张都对上后存成本机校准。"""
     from lolhex.vision.detector import AugmentDetector
     from lolhex.vision.window import Rect
-    det = AugmentDetector(NameMatcher(NAMES), tmp_path / "calibration.json")
+    det = AugmentDetector(NameMatcher(NAMES), tmp_path / "calibration.json", ocr=OCR.get())
     det.ensure_calibration(*size)
     assert det.calibrated_for(*size) and not det.confirmed_for(*size)
     win = Rect(0, 0, *size)
@@ -87,7 +90,8 @@ def test_default_calibration_reads_first_offer(tmp_path, size):
     offer = det.check_strip(frame[sr.top:sr.bottom, sr.left:sr.right], win)
     assert names(offer) == ["质变：棱彩阶", "炽燃利息", "虚幻武器"]
     assert det.confirmed_for(*size)
-    assert AugmentDetector(NameMatcher(NAMES), tmp_path / "calibration.json").confirmed_for(*size)
+    assert AugmentDetector(NameMatcher(NAMES), tmp_path / "calibration.json",
+                           ocr=OCR.get()).confirmed_for(*size)
 
 
 def test_ocr_uses_one_thread(monkeypatch):

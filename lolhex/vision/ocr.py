@@ -9,11 +9,15 @@ Det/Rec/Cls 三个模型固定用安装包内的本地文件（见 _MODEL_FILES�
 损坏文件由 onnxruntime 拒绝；任何情况下都不会去 modelscope.cn 下载模型。
 只用一个线程：onnxruntime 默认把所有核都拉来算，对局中每次认字都会和游戏抢 CPU，玩家会掉帧、卡顿。
 单线程总 CPU 少一半，慢一点（标题条约 70ms、整块扫描约 1 秒）不影响使用。
+
+这个模块同时是 OCR 后端的入口：`get_ocr()` 默认用 Windows.Media.Ocr（系统自带，更快更小），
+Windows 引擎用不了时退回这里的 RapidOCR。接口只有 detect / recognize 两个方法。
 """
 
 from __future__ import annotations
 
 import logging
+import os
 import threading
 from dataclasses import dataclass
 from pathlib import Path
@@ -131,3 +135,45 @@ class OCR:
         if r is None or not getattr(r, "txts", None):
             return "", 0.0
         return str(r.txts[0]), float(r.scores[0])
+
+
+# ---------- OCR 后端选择 ----------
+
+# 默认用系统自带的 Windows.Media.Ocr；ARAMHEX_OCR=rapid 可以强制退回 RapidOCR（对比、排查用）。
+ENGINE_ENV = "ARAMHEX_OCR"
+_engines: dict[tuple[str, str], object] = {}
+_engines_lock = threading.Lock()
+
+
+def _build_engine(wanted: str, game_lang: str):
+    if wanted != "rapid":
+        try:
+            from .ocr_win import WinOCR
+
+            inst = WinOCR(game_lang)
+            log.info("OCR 引擎：Windows.Media.Ocr（%s）", inst.language)
+            return inst
+        except Exception as e:  # 没有对应语言的识别包、WinRT 装不上：退回内置模型
+            log.warning("Windows OCR 用不了（%s），这次用 RapidOCR", e)
+    return OCR.get()
+
+
+def get_ocr(game_lang: str = "en_US", engine: str | None = None):
+    """当前 OCR 后端（同一个语言复用同一个引擎）。
+
+    后端只有两个方法：detect(图) → 文字行列表，recognize(图) → (文字, 分数)。
+    """
+    wanted = (engine or os.environ.get(ENGINE_ENV) or "win").strip().lower()
+    key = (wanted, game_lang or "en_US")
+    with _engines_lock:
+        inst = _engines.get(key)
+        if inst is None:
+            inst = _build_engine(wanted, key[1])
+            _engines[key] = inst
+        return inst
+
+
+def reset_engines() -> None:
+    """丢掉缓存的引擎（换语言、测试换后端时用）。"""
+    with _engines_lock:
+        _engines.clear()

@@ -22,7 +22,7 @@ from pathlib import Path
 import numpy as np
 
 from .matcher import NameMatcher
-from .ocr import OCR, TextLine
+from .ocr import TextLine, get_ocr
 from .window import Rect
 
 log = logging.getLogger(__name__)
@@ -97,11 +97,12 @@ def fp_changed(a: np.ndarray | None, b: np.ndarray) -> bool:
 
 
 class AugmentDetector:
-    def __init__(self, matcher: NameMatcher, calib_path: Path | None = None, ocr: OCR | None = None,
-                 rarities: dict[str, str] | None = None):
+    def __init__(self, matcher: NameMatcher, calib_path: Path | None = None, ocr=None,
+                 rarities: dict[str, str] | None = None, game_lang: str = "en_US"):
         self.matcher = matcher
         self.calib_path = calib_path
         self._ocr = ocr
+        self.game_lang = game_lang
         self.rarities = rarities or {}
         self.calibration: Calibration | None = None
         self._last_fp: np.ndarray | None = None
@@ -123,9 +124,9 @@ class AugmentDetector:
                 self.calibration = None
 
     @property
-    def ocr(self) -> OCR:
+    def ocr(self):
         if self._ocr is None:
-            self._ocr = OCR.get()
+            self._ocr = get_ocr(self.game_lang)
         return self._ocr
 
     def clear_tracking(self) -> None:
