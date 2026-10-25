@@ -83,12 +83,13 @@ def main(argv=None) -> int:
     ap.add_argument("--hero")
     ap.add_argument("--debug", action="store_true")
     ap.add_argument("--minimized", action="store_true", help="启动后只显示托盘（开机自启用）")
-    ap.add_argument("--self-test-gui", metavar="REPORT", help="离线检查打包后的 Qt 和窗口插件，写入 JSON 后退出")
+    ap.add_argument("--self-test-gui", metavar="REPORT", help="离线检查打包后的 Qt、OCR 和界面，写入 JSON 后退出")
+    ap.add_argument("--self-test-fixture", metavar="PNG", help="配合 --self-test-gui：再跑一遍真实截图 → 三张标签")
     args = ap.parse_args(argv)
 
     if args.self_test_gui:
         from .gui_selftest import run
-        return run(args.self_test_gui)
+        return run(args.self_test_gui, args.self_test_fixture)
 
     _fix_stdio()
     from . import BETA, __version__
