@@ -262,6 +262,12 @@ CommunityDragon paths to regenerate bundled tables; they never import Tencent en
   raises `OcrUnavailable` for a language Windows does not have (this machine: only `en-GB`),
   because an English engine reading Chinese card faces returns nothing and looks like "OCR is
   broken". Install the pack in Windows settings; the log names what is missing.
+- **RapidOCR has been removed** — see the milestone-3 record. OCR is `get_ocr()` on
+  Windows.Media.Ocr; there is no bundled model and no fallback backend.
+- **PowerShell 5.1 needs a UTF-8 BOM to read a `.ps1` with Chinese.** There is no `pwsh` on
+  this machine, and a BOM-less script is decoded as ANSI, which fails to parse (`Unexpected
+  token`). `packaging/build.ps1` keeps a BOM for that reason; add one to any new script with
+  non-ASCII text and say so in its header.
 - **Wait on WinRT without asyncio.** An asyncio loop creates a loopback socketpair on
   Windows, which the offline acceptance test's no-socket guard reports as a connection. Use
   the completion handler + `threading.Event` (see `ocr_win._wait`).

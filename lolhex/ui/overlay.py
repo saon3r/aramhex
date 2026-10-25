@@ -11,6 +11,7 @@
 from __future__ import annotations
 
 import logging
+import os
 import time
 from html import escape
 
@@ -927,7 +928,16 @@ def run(make_engine, minimized: bool = False) -> int:
     # 界面颜色是按浅色配的（卡片底色、灰字写死）：不跟随 Windows 深色模式，否则白字压在浅色卡片上看不见
     app.styleHints().setColorScheme(Qt.ColorScheme.Light)
 
-    name = f"{SINGLE_INSTANCE}-{getpass.getuser()}"
+    name = f"{SINGLE_INSTANCE}-{_instance_user()}"
+
+
+def _instance_user() -> str:
+    """单实例名字里的用户名。getpass 在没有 USERNAME/LOGNAME 的环境里会抛 OSError
+    （打包后由计划任务、服务或剥掉环境变量的启动器拉起时会遇到），那种情况下不能崩。"""
+    try:
+        return getpass.getuser()
+    except Exception:
+        return str(os.environ.get("USERNAME") or os.environ.get("USER") or "default")
 
     def notify_running() -> bool:
         for _ in range(3):  # 已有的助手可能正忙，多试几次
