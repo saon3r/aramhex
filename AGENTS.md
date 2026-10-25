@@ -12,6 +12,29 @@ integration. Built for one player on EUW with an `en_GB` client.
 Read the design doc before proposing anything. It records what was measured, what was
 rejected and why. Most "obvious improvements" were already considered there.
 
+## Relationship to upstream — this fork has diverged
+
+This is not a tracked fork that can merge upstream again. It was forked to personalise, and the
+divergence is structural, not cosmetic:
+
+- telemetry, cloud identity, log upload, self-update, remote config and the Riot-ID rank lookup
+  are **deleted** (upstream modules and their callers are gone);
+- Tencent metadata, portraits and build/skill feeds are **replaced** with Data Dragon and
+  CommunityDragon, and runtime HTTP is restricted to four documented host families;
+- RapidOCR and its ONNX models are **gone**, replaced by Windows.Media.Ocr;
+- the UI is English through a message catalog (upstream is Chinese), including text produced
+  outside `lolhex/ui`;
+- packaging (`packaging/lolhex.spec`, `build.ps1`) was changed for the new dependencies.
+
+So **do not plan an upstream merge**; adding the `upstream` remote's `main` would produce a
+conflict set larger than the feature anyone wanted, and would silently reintroduce telemetry if
+resolved carelessly. Upstream commits are cherry-picks at best, and usually not even that: the
+files they touch often no longer exist here. If a specific upstream fix matters, read that diff,
+port the *intent* by hand into this codebase, and prove it with this suite plus the relevant
+acceptance (fixture, and a live game for recognition changes).
+
+The remote is kept only to read upstream history and to attribute code.
+
 ## Who does what — read this twice
 
 **The owner is not a programmer. Treat them as the client, not as a pair.**
@@ -97,6 +120,12 @@ Fanning out is allowed; shared state is not.
 - Unwaived acceptance: real post-removal app refresh, offline startup, fixture OCR and
   three rendered badges, live bench recognition, and one full English-game session.
 
+- **All milestones closed.** #2/#3/#4/#6 verified (#4 is milestone 3, #6 is milestone 5);
+  #11/#12 follow-ups done. **#5 (client API) was rejected as not planned** — the champion
+  offer is not in the champ-select session, recorded in the design doc so it is not
+  re-proposed. The only open issue is **#18 (low priority)**: make "cards on screen, nothing
+  recognised" visible instead of silent, because the layout constants are measured against
+  today's augment screen and a Riot restyle would look like a broken app.
 - **Milestone 1 — verified.** Upstream runs unmodified on this client. The augment screen
   is proven against `tests/fixtures/real-mayhem-augment-screen.png`; the app launches.
   Champion select was the one unchecked item and was verified live in milestone 2.
