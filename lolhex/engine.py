@@ -94,6 +94,8 @@ class Engine:
             self.store.hold = lambda: self.state["phase"] == "ingame"
         self._rescan = threading.Event()
         self._vision_error: str | None = None  # 上一次识别异常（同一原因只记一次堆栈）
+        self._observer_error: str | None = None  # 上一次观察异常（同一原因只记一次堆栈）
+        self._ocr_warned: tuple[str, str] | None = None  # 已警告过的「识别器缺失」条件
         self._detector = None  # 延迟创建，避免没进游戏就加载 OCR 模型
         self._icon_bank = None  # 英雄头像库，头像下载好后创建
         from .data.icons import IconCache
@@ -109,7 +111,8 @@ class Engine:
             "phase": None,  # None / client / ingame
             "hero_id": None, "hero_source": None, "hero_candidates": [],
             "game_window": False, "client_window": False,
-            "vision": {"status": "idle", "calibrated": False, "last_scan": None, "blank": False},
+            "vision": {"status": "idle", "calibrated": False, "last_scan": None, "blank": False,
+                       "error": None},  # {"code": "ocr_unavailable", "language": "zh_CN"}；界面照这个提示
             "offer": None, "evaluation": None,
             "champ_select": None,  # {"bench": [...], "team": [...]}，每项带胜率和排名
         }
@@ -137,6 +140,43 @@ class Engine:
     def _set(self, **kw) -> None:
         with self._lock:
             self.state.update(kw)
+
+    # ---------- 识别器状态 ----------
+
+    def _note_ocr_unavailable(self, error: Exception) -> bool:
+        """识别器缺失（observer / vision / 启动预热共用）：状态给界面看，同一条件只警告一次。
+        返回 True 表示这就是「缺识别包」这个预期情况——调用方不要再打一份堆栈。"""
+        from .vision.ocr_win import OcrUnavailable
+        if not isinstance(error, OcrUnavailable):
+            return False
+        language = self.settings.game_lang
+        condition = (language, str(error))
+        with self._lock:
+            self.state["vision"]["error"] = {"code": "ocr_unavailable", "language": language}
+            first = condition != self._ocr_warned
+            self._ocr_warned = condition
+        if first:
+            log.warning("Windows OCR unavailable for game language %s: %s", language, error)
+        return True
+
+    def _clear_ocr_error(self) -> None:
+        """识别恢复（成功取到识别器 / 换语言）：清掉界面提示，下次再缺语言包重新警告一次。"""
+        with self._lock:
+            if self.state["vision"].get("error"):
+                self.state["vision"]["error"] = None
+            self._ocr_warned = None
+
+    def _ocr(self):
+        """当前界面语言的识别器；缺语言包时记进状态再抛给调用方。"""
+        from .vision.ocr import get_ocr
+        from .vision.ocr_win import OcrUnavailable
+        try:
+            engine = get_ocr(self.settings.game_lang)
+        except OcrUnavailable as e:
+            self._note_ocr_unavailable(e)
+            raise
+        self._clear_ocr_error()
+        return engine
 
     # ---------- 玩家操作 ----------
 
@@ -173,6 +213,7 @@ class Engine:
     def set_game_lang(self, lang: str) -> None:
         """设置里换了游戏语言：换认字用的名字表和识别语言，选人界面的缓存作废。"""
         self.settings.game_lang = i18n.normalize_lang(lang)
+        self._clear_ocr_error()  # 旧语言缺识别包的提示不能留给新语言
         self._hm = None
         self._cs_memo = None
         from .vision.ocr import reset_engines
@@ -229,14 +270,17 @@ class Engine:
         try:
             self._load_icons(download=False)
             import numpy as np
-            from .vision.ocr import get_ocr
             import cv2
             sample = np.full((64, 256, 3), 255, np.uint8)
             cv2.putText(sample, "LolHex 123", (8, 44), cv2.FONT_HERSHEY_SIMPLEX, 1.2, (0, 0, 0), 2)
-            get_ocr(self.settings.game_lang).recognize(sample)  # 首次推理最慢，两边都先各跑一次
-            get_ocr(self.settings.game_lang).detect(sample)
-        except Exception:
-            log.exception("预热失败")
+            self._ocr().recognize(sample)  # 首次推理最慢，两边都先各跑一次
+            self._ocr().detect(sample)
+        except Exception as e:
+            if self._note_ocr_unavailable(e):
+                # 缺识别包是预期情况：界面已经提示过，日志里只留一行，不当崩溃
+                log.debug("预热跳过：识别器不可用")
+            else:
+                log.exception("预热失败")
 
     def _augment_matcher(self) -> NameMatcher:
         return augment_matcher(self.store, self.settings)
@@ -300,12 +344,25 @@ class Engine:
 
     def _observer_loop(self) -> None:
         while not self._stop.is_set():
-            interval = 3.0
-            try:
-                interval = self._observe_once()
-            except Exception:
+            self._stop.wait(self._observe_tick())
+
+    def _observe_tick(self) -> float:
+        """一次观察；异常按原因去重（识别器缺失另记进状态，界面据此提示）。"""
+        try:
+            interval = self._observe_once()
+        except Exception as e:
+            if self._note_ocr_unavailable(e):
+                # 缺识别包：状态里已经记了、界面已经提示过；这不是状态读取故障
+                log.debug("状态读取跳过：识别器不可用")
+                return 3.0
+            if repr(e) != self._observer_error:
+                self._observer_error = repr(e)
                 log.exception("状态读取异常")
-            self._stop.wait(interval)
+            else:
+                log.debug("状态读取异常（同一原因，已记录）：%s", e)
+            return 3.0
+        self._observer_error = None
+        return interval
 
     def _observe_once(self) -> float:
         game = win.find_game_window()
@@ -386,8 +443,7 @@ class Engine:
         """客户端截图 → 标注数据 {"bench", "team", "mine", "cards"?}；
         不在选英雄界面返回 False，在界面但什么都没认出返回 None。"""
         from .vision import champselect
-        from .vision.ocr import get_ocr
-        ocr = get_ocr(self.settings.game_lang)
+        ocr = self._ocr()
         if self._cs_memo is None:
             self._cs_memo = champselect.Memo()
         memo = self._cs_memo
@@ -433,8 +489,7 @@ class Engine:
         return got
 
     def _read_hero_name(self, crop) -> str | None:
-        from .vision.ocr import get_ocr
-        txt, sc = get_ocr(self.settings.game_lang).recognize(crop)
+        txt, sc = self._ocr().recognize(crop)
         return self._hero_by_name(txt) if sc >= 0.6 else None
 
     def _hero_by_name(self, txt: str) -> str | None:
@@ -445,11 +500,10 @@ class Engine:
 
     def _champ_select_ocr(self, img) -> None:
         from .vision.detector import _resize
-        from .vision.ocr import get_ocr
         scale = min(1.0, 1600 / max(1, img.shape[1]))
         m = self._hero_matcher()
         found = []
-        for ln in get_ocr(self.settings.game_lang).detect(_resize(img, scale)):
+        for ln in self._ocr().detect(_resize(img, scale)):
             if len(normalize(ln.text)) < 2:  # 整屏什么字都有：单独一个字（聊天、名字里的）不当英雄名，「慎」「劫」靠头像认
                 continue
             key, sc = m.match(ln.text)
@@ -542,12 +596,18 @@ class Engine:
                     offer = None if blank else det.scan_full(frame, (rect.left, rect.top))
                     ran = True
             except Exception as e:
+                # 缺识别包：状态给界面，同一语言只警告一次（这是预期情况，不打堆栈）
                 # 后端持续坏掉时别每 300ms 刷一次堆栈：同一原因每局只记一次完整的
-                if repr(e) != self._vision_error:
+                if self._note_ocr_unavailable(e):
+                    log.debug("识别跳过：识别器不可用")
+                elif repr(e) != self._vision_error:
                     self._vision_error = repr(e)
                     log.exception("识别异常")
                 else:
                     log.debug("识别异常（同一原因，已记录）：%s", e)
+            else:
+                if ran:
+                    self._clear_ocr_error()  # 能正常扫就说明识别器可用
             self.state["vision"].update(status="scanning", calibrated=det.confirmed_for(rect.width, rect.height))
             if ran:
                 self.state["vision"]["last_scan"] = time.time()
@@ -581,7 +641,10 @@ class Engine:
     SHOTS_KEEP = 3
 
     def _save_offer_shot(self, rect) -> None:
-        """前几次出现三选一时存一张全屏截图（缩到 1920 宽），用来核对浮窗位置；存够就不再截。"""
+        """前几次出现三选一时存一张全屏截图（缩到 1920 宽），用来核对浮窗位置；存够就不再截。
+        只在调试模式（--debug / debug.txt）下保存：普通运行连屏幕都不截，也不动已有截图。"""
+        if not getattr(self.settings, "debug_mode", False):
+            return
         folder = self.home / "shots"
         try:
             if folder.is_dir() and len(list(folder.glob("offer_*.jpg"))) >= self.SHOTS_KEEP:

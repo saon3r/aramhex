@@ -116,6 +116,9 @@
     "main.status.data": "Data:",
     "main.status.label": "Status:",
     "main.status.vision": "Augment scan:",
+    "ocr.pack.en_us": "English (United States) / en-US or English (United Kingdom) / en-GB",
+    "ocr.pack.ja_jp": "Japanese / ja-JP",
+    "ocr.pack.zh_cn": "Chinese (Simplified, China) / zh-CN",
     "offer.none": "Not picking an augment",
     "overlay.badge.pbe": "PBE {games} games, {win} win rate",
     "overlay.badge.rarity_rank": "{rarity} #{rank}/{total}",
@@ -201,7 +204,8 @@
     "vision.idle": "Idle",
     "vision.paused": "Paused - game not in the foreground",
     "vision.scanning": "Scanning",
-    "warning.fullscreen": "The game may be in full-screen mode, which cannot be captured. In the game settings, set Window Mode to Borderless or Windowed."
+    "warning.fullscreen": "The game may be in full-screen mode, which cannot be captured. In the game settings, set Window Mode to Borderless or Windowed.",
+    "warning.ocr_unavailable": "Add the 'Optical character recognition' feature for {language} in Windows Settings > Time & language > Language & region. Windows OCR cannot read this client language until you do."
   },
   "zh_CN": {
     "about.disclaimer": "Stats are collected from the Chinese (CN) server. Unofficial tool, not affiliated with Tencent or Riot Games.",
@@ -320,6 +324,9 @@
     "main.status.data": "数据：",
     "main.status.label": "状态：",
     "main.status.vision": "海克斯识别：",
+    "ocr.pack.en_us": "英语（美国）/ en-US 或 英语（英国）/ en-GB",
+    "ocr.pack.ja_jp": "日语 / ja-JP",
+    "ocr.pack.zh_cn": "中文（简体，中国）/ zh-CN",
     "offer.none": "未在选海克斯",
     "overlay.badge.pbe": "测试服 {games} 局 胜率{win}",
     "overlay.badge.rarity_rank": "{rarity}第{rank}/{total}",
@@ -405,6 +412,7 @@
     "vision.idle": "待机",
     "vision.paused": "游戏不在前台，暂停",
     "vision.scanning": "扫描中",
-    "warning.fullscreen": "游戏可能是全屏模式，无法识别。请在游戏内设置-窗口模式中选择无边框/窗口。"
+    "warning.fullscreen": "游戏可能是全屏模式，无法识别。请在游戏内设置-窗口模式中选择无边框/窗口。",
+    "warning.ocr_unavailable": "请在 Windows 设置 > 时间和语言 > 语言和区域里，为 {language} 添加「光学字符识别」可选功能；装好前不识别卡面和英雄名。"
   }
 }

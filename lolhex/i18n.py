@@ -12,6 +12,8 @@ import logging
 from functools import lru_cache
 from pathlib import Path
 
+from .messages import tr
+
 log = logging.getLogger(__name__)
 
 PATH = Path(__file__).resolve().parent / "data" / "i18n.json"
@@ -23,6 +25,9 @@ LANGS = [("zh_CN", "中文 简-繁（国服、台服）"), ("en_US", "English（
 # 1.1.1 起没有韩服选项：认韩文要单独的识别模型，模型下载已移除，选了也认不出。
 # 老设置文件里留着 ko_KR 的，按英文客户端处理（本工具的目标客户端），不要再当中文。
 RETIRED = {"ko_KR"}
+# 英国英语客户端识别上就是英语：本 fork 的目标客户端是 en_GB，老设置文件里也可能存着它。
+# 内部统一用 en_US（名字表、识别器按 en-US/en-GB 顺序找），不能落到「未知语言 → 中文」。
+ENGLISH_ALIASES = {"en_GB": "en_US"}
 LANG_CODES = {code for code, _ in LANGS}
 TW = "zh_TW"
 # 国服客户端选英雄界面上的字（i18n.json 里也有，这里写死，名字表缺失时国服照常能用）
@@ -32,6 +37,8 @@ UI_CN = {"bench": "可用", "pick": "选择你的英雄"}
 def normalize_lang(lang: str | None) -> str:
     if lang in RETIRED:
         return "en_US"
+    if lang in ENGLISH_ALIASES:
+        return ENGLISH_ALIASES[lang]
     return lang if lang in LANG_CODES else "zh_CN"
 
 
@@ -91,3 +98,20 @@ def ui_texts(key: str, lang: str) -> list[str]:
         if tw and tw not in out:
             out.append(tw)
     return out
+
+
+# 缺 OCR 识别包时的提示：内部代码（en_US、zh_CN）在 Windows 界面上根本看不到，玩家要照着
+# 设置里显示的语言名和标签才找得到。语言名放在文案目录里，和界面语言一起切换。
+OCR_PACK_KEYS = {"zh_CN": "ocr.pack.zh_cn", "en_US": "ocr.pack.en_us", "ja_JP": "ocr.pack.ja_jp"}
+
+
+def ocr_pack_name(lang: str | None) -> str:
+    """识别语言代码 → Windows 里显示的语言名和标签；目录里没有的代码原样返回，不猜。"""
+    code = ENGLISH_ALIASES.get(lang or "", lang or "")
+    key = OCR_PACK_KEYS.get(code)
+    return tr(key) if key else (code or "?")
+
+
+def ocr_unavailable_notice(lang: str | None) -> str:
+    """缺识别包时给玩家看的一句话：主界面、浮窗、托盘共用同一份，不各拼一遍。"""
+    return tr("warning.ocr_unavailable", language=ocr_pack_name(lang))

@@ -20,7 +20,7 @@ from PySide6.QtGui import QColor, QCursor, QFont, QFontMetrics, QGuiApplication,
 from PySide6.QtWidgets import (QApplication, QHBoxLayout, QLabel, QLineEdit, QPushButton,
                                QVBoxLayout, QWidget)
 
-from .. import recommend
+from .. import i18n, recommend
 from ..data.metadata import display_augment_name, display_hero_name, display_hero_title
 from ..messages import tr
 from ..vision import window as win
@@ -831,7 +831,12 @@ class ControlPanel(QWidget):
             if top:
                 parts.append(tr("augment.recommended_label") + " " + tr("common.list_separator").join(
                     f"{escape(display_augment_name(a.get('id')))}({a['delta']:+.1f})" for a in top[:5]))
-        if snap.get("vision", {}).get("blank"):
+        vision = snap.get("vision") or {}
+        error = vision.get("error") or {}
+        if error.get("code") == "ocr_unavailable":
+            parts.append(f"<span style='color:#ff7a6b'>"
+                         f"{i18n.ocr_unavailable_notice(error.get('language'))}</span>")
+        if vision.get("blank"):
             parts.append(f"<span style='color:#ff7a6b'>{tr('warning.fullscreen')}</span>")
         parts.append(f"<span style='color:#8b93a7'>{data_status_html(snap.get('data', {}))}</span>")
         parts.append(f"<a href='rescan' style='color:#62a8ff'>{tr('common.rescan')}</a>&nbsp;&nbsp;"
@@ -865,9 +870,18 @@ class Overlay:
             self.champ.hide()
 
     def _tick(self):
+        snap = self.engine.snapshot()
+        # 缺识别器只在条件变化时提醒一次（浮窗关掉也要提醒：没有识别包整局都用不了）；
+        # 恢复后再次缺包会重新提醒。
+        error = (snap.get("vision") or {}).get("error") or {}
+        key = (error.get("code"), error.get("language")) if error else None
+        if key != getattr(self, "_ocr_notice_key", None):
+            self._ocr_notice_key = key
+            notify = getattr(self, "notify", None)
+            if key and key[0] == "ocr_unavailable" and notify:
+                notify(i18n.ocr_unavailable_notice(key[1]))
         if not getattr(self, "visible", True):
             return
-        snap = self.engine.snapshot()
         if snap.get("vision", {}).get("blank") and not getattr(self, "_blank_warned", False):
             self._blank_warned = True  # 每次打开软件最多提醒一次
             notify = getattr(self, "notify", None)
