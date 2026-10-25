@@ -93,6 +93,7 @@ class Engine:
         if hasattr(self.store, "hold"):
             self.store.hold = lambda: self.state["phase"] == "ingame"
         self._rescan = threading.Event()
+        self._vision_error: str | None = None  # 上一次识别异常（同一原因只记一次堆栈）
         self._detector = None  # 延迟创建，避免没进游戏就加载 OCR 模型
         self._icon_bank = None  # 英雄头像库，头像下载好后创建
         from .data.icons import IconCache
@@ -176,11 +177,12 @@ class Engine:
         self._cs_memo = None
         from .vision.ocr import reset_engines
         reset_engines()  # 换语言要重新挑识别器，别复用旧语言的缓存
-        if self._detector:
-            # 检测器自己记着语言：只清 _ocr 会让它用旧语言的引擎重建
-            self._detector.game_lang = self.settings.game_lang
-            self._detector._ocr = None
-            self._detector.set_matcher(self._augment_matcher())
+        with self._lock:   # 和识别线程建检测器串行，避免建出带旧语言的那一个
+            if self._detector:
+                # 检测器自己记着语言：只清 _ocr 会让它用旧语言的引擎重建
+                self._detector.game_lang = self.settings.game_lang
+                self._detector._ocr = None
+                self._detector.set_matcher(self._augment_matcher())
         self.rescan()
         log.info("游戏语言：%s", self.settings.game_lang)
 
@@ -508,9 +510,11 @@ class Engine:
                 self._stop.wait(0.5)
                 continue
             if self._detector is None:
-                self._detector = AugmentDetector(self._augment_matcher(), self.home / "calibration.json",
-                    rarities={aid: a.get("rarity") for aid, a in self.store.augments.items()},
-                    game_lang=self.settings.game_lang)
+                with self._lock:   # 和 set_game_lang 串行：换语言时不会建出一个带旧语言的检测器
+                    if self._detector is None:
+                        self._detector = AugmentDetector(self._augment_matcher(), self.home / "calibration.json",
+                            rarities={aid: a.get("rarity") for aid, a in self.store.augments.items()},
+                            game_lang=self.settings.game_lang)
             det = self._detector
             det.ensure_calibration(rect.width, rect.height)
             now = time.monotonic()
@@ -537,8 +541,13 @@ class Engine:
                     self.state["vision"]["blank"] = blank
                     offer = None if blank else det.scan_full(frame, (rect.left, rect.top))
                     ran = True
-            except Exception:
-                log.exception("识别异常")
+            except Exception as e:
+                # 后端持续坏掉时别每 300ms 刷一次堆栈：同一原因每局只记一次完整的
+                if repr(e) != self._vision_error:
+                    self._vision_error = repr(e)
+                    log.exception("识别异常")
+                else:
+                    log.debug("识别异常（同一原因，已记录）：%s", e)
             self.state["vision"].update(status="scanning", calibrated=det.confirmed_for(rect.width, rect.height))
             if ran:
                 self.state["vision"]["last_scan"] = time.time()

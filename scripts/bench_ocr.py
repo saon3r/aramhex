@@ -23,6 +23,7 @@ import cv2
 
 REPO = Path(__file__).resolve().parent.parent
 sys.path.insert(0, str(REPO))
+sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # cp1252 控制台打印中文会崩
 
 from lolhex.vision.detector import AugmentDetector, REC_HEIGHT, _resize  # noqa: E402
 from lolhex.vision.matcher import NameMatcher                            # noqa: E402
@@ -87,12 +88,18 @@ def bench(frame, label: str, rounds: int = 5) -> None:
             det.scan_full(frame, (rect.left, rect.top))
             full_times.append((time.perf_counter() - t) * 1000)
 
+        read_rounds = [out for out in outputs if out[0]]
         print(f"  {name:12s} 标题条 3 张 中位 {statistics.median(strip_times):7.2f} ms"
               f"（最小 {min(strip_times):.2f}）"
               f" | 单张 中位 {statistics.median(per_card):5.2f} ms"
               f" | 整块扫描 中位 {statistics.median(full_times):7.2f} ms")
-        slots, texts = outputs[0]
-        print(f"               第一轮读到：{slots} {texts}")
+        if not read_rounds:
+            # 一轮都没认出卡：这个耗时没有意义，必须说出来
+            print(f"               ⚠ {rounds} 轮都没认出卡，上面的耗时不可当作识别成功")
+            continue
+        distinct = {tuple(out[0]) for out in read_rounds}
+        print(f"               认出的卡（{len(read_rounds)}/{len(outputs)} 轮）：{sorted(distinct)}")
+        print(f"               其中一轮的文字：{read_rounds[0][1]}")
 
 
 def main() -> int:
@@ -105,7 +112,10 @@ def main() -> int:
     frames = [("fixture", cv2.imread(str(fixture)))]
     if args.captures:
         folder = Path(args.captures)
-        for path in sorted(folder.glob("*-offer.png"))[:3]:
+        found = sorted(folder.glob("*-offer.png"))[:3]
+        if not found:
+            print(f"⚠ {folder} 里没有 *-offer.png：只测 fixture")
+        for path in found:
             frames.append((path.name, cv2.imread(str(path))))
     for label, frame in frames:
         if frame is None:
