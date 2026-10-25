@@ -66,10 +66,10 @@ a failed or malformed refresh keeps the last valid cache and the bundled fallbac
 - The published v1.1.3 portable executable passed all 18 packaged acceptance checks on
   25 October 2026, including execution without Python on PATH, English UI, fixture OCR,
   three rendered badges, offline warm startup and the missing-recognizer diagnostic.
-  A full live game with the packaged application was verified during the packaging
-  milestone. See the [packaging verification record](docs/verification/packaging.md).
+  Separately, the v1.1.1 packaged application completed a full debug-mode live game
+  during the packaging milestone. See the [packaging verification record](docs/verification/packaging.md).
   A replacement release must pass fresh acceptance, including a normal (non-debug)
-  game that creates no diagnostic screenshots, before it is published.
+  game that leaves both local screenshot folders unchanged, before it is published.
 
 ## Attribution and licence boundaries
 

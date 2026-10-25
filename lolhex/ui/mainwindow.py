@@ -486,7 +486,7 @@ class MainWindow(QMainWindow):
         err = v.get("error") or {}
         warnings = []
         if err.get("code") == "ocr_unavailable":
-            warnings.append(tr("warning.ocr_unavailable", language=err.get("language") or "?"))
+            warnings.append(i18n.ocr_unavailable_notice(err.get("language")))
         if v.get("blank"):
             warnings.append(tr("warning.fullscreen"))
         warn = "".join(f" · <span style=\"color:#d0533f\">{text}</span>" for text in warnings)

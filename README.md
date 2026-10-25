@@ -41,6 +41,10 @@ rights, and Windows can remove it like any other program.
 your Downloads folder), and run `AramHex.exe`. Settings live in a `userdata` folder beside
 the exe, so the whole thing moves with the folder and deleting it is the uninstall.
 
+To upgrade a portable copy, extract the new ZIP beside the old folder, copy the old folder's
+`userdata` folder into the new one, and only then delete the old folder. `userdata` holds your
+settings, logs and downloaded statistics — deleting it loses all three.
+
 Either way, the first launch downloads the statistics (a few seconds). After that it works
 offline.
 
@@ -76,8 +80,9 @@ Everything in the app is labelled accordingly.
 **The augment screen's layout is measured against the current UI.** If Riot restyles it, the
 badges stop appearing. There is an open issue to make that failure visible instead of silent.
 
-**It needs an English client.** The OCR engine needs Windows' `en-GB` recogniser pack; the
-app logs a clear message if it is missing rather than silently misreading.
+**It needs an English client.** Windows' OCR needs an English recogniser pack (`en-US` or
+`en-GB`); the app warns you in the main window, the overlay and a tray notification if it is
+missing, and turns recognition back on once you install it.
 
 **Not affiliated with Riot Games.** Personal, non-commercial project. Riot's developer policy
 does not approve published augment win-rate overlays, which is why this is a personal tool

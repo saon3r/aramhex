@@ -78,7 +78,9 @@ Copy-Item -Recurse (Join-Path $dist '*') $stage
 Set-Content -LiteralPath (Join-Path $stage 'portable.txt') -Encoding utf8 -Value @'
 This is the portable build: settings, logs and downloaded data stay in the userdata folder next to this file, never in system folders.
 Delete this whole folder to uninstall.
-There is no automatic update. When a new version is out, download the portable ZIP yourself and replace this folder with the new one.
+There is no automatic update: when a new version is out, download the portable ZIP yourself and extract it beside this folder.
+Copy the existing userdata folder into the new folder, and only then delete the old folder.
+userdata holds your settings, logs and downloaded data, so deleting it loses all three.
 https://github.com/saon3r/aramhex/releases
 '@
 Copy-Item (Join-Path $root 'LICENSE') $stage

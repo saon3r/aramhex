@@ -143,11 +143,12 @@ class Engine:
 
     # ---------- 识别器状态 ----------
 
-    def _note_ocr_unavailable(self, error: Exception) -> None:
-        """识别器缺失（observer / vision / 启动预热共用）：状态给界面看，同一条件只警告一次。"""
+    def _note_ocr_unavailable(self, error: Exception) -> bool:
+        """识别器缺失（observer / vision / 启动预热共用）：状态给界面看，同一条件只警告一次。
+        返回 True 表示这就是「缺识别包」这个预期情况——调用方不要再打一份堆栈。"""
         from .vision.ocr_win import OcrUnavailable
         if not isinstance(error, OcrUnavailable):
-            return
+            return False
         language = self.settings.game_lang
         condition = (language, str(error))
         with self._lock:
@@ -156,6 +157,7 @@ class Engine:
             self._ocr_warned = condition
         if first:
             log.warning("Windows OCR unavailable for game language %s: %s", language, error)
+        return True
 
     def _clear_ocr_error(self) -> None:
         """识别恢复（成功取到识别器 / 换语言）：清掉界面提示，下次再缺语言包重新警告一次。"""
@@ -274,8 +276,11 @@ class Engine:
             self._ocr().recognize(sample)  # 首次推理最慢，两边都先各跑一次
             self._ocr().detect(sample)
         except Exception as e:
-            self._note_ocr_unavailable(e)  # 缺识别包在启动时就告诉界面，不用等第一次扫描
-            log.exception("预热失败")
+            if self._note_ocr_unavailable(e):
+                # 缺识别包是预期情况：界面已经提示过，日志里只留一行，不当崩溃
+                log.debug("预热跳过：识别器不可用")
+            else:
+                log.exception("预热失败")
 
     def _augment_matcher(self) -> NameMatcher:
         return augment_matcher(self.store, self.settings)
@@ -346,7 +351,10 @@ class Engine:
         try:
             interval = self._observe_once()
         except Exception as e:
-            self._note_ocr_unavailable(e)
+            if self._note_ocr_unavailable(e):
+                # 缺识别包：状态里已经记了、界面已经提示过；这不是状态读取故障
+                log.debug("状态读取跳过：识别器不可用")
+                return 3.0
             if repr(e) != self._observer_error:
                 self._observer_error = repr(e)
                 log.exception("状态读取异常")
@@ -588,9 +596,11 @@ class Engine:
                     offer = None if blank else det.scan_full(frame, (rect.left, rect.top))
                     ran = True
             except Exception as e:
-                self._note_ocr_unavailable(e)  # 缺识别包：状态给界面，同一语言只警告一次
+                # 缺识别包：状态给界面，同一语言只警告一次（这是预期情况，不打堆栈）
                 # 后端持续坏掉时别每 300ms 刷一次堆栈：同一原因每局只记一次完整的
-                if repr(e) != self._vision_error:
+                if self._note_ocr_unavailable(e):
+                    log.debug("识别跳过：识别器不可用")
+                elif repr(e) != self._vision_error:
                     self._vision_error = repr(e)
                     log.exception("识别异常")
                 else:

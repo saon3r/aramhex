@@ -12,6 +12,8 @@ import logging
 from functools import lru_cache
 from pathlib import Path
 
+from .messages import tr
+
 log = logging.getLogger(__name__)
 
 PATH = Path(__file__).resolve().parent / "data" / "i18n.json"
@@ -96,3 +98,20 @@ def ui_texts(key: str, lang: str) -> list[str]:
         if tw and tw not in out:
             out.append(tw)
     return out
+
+
+# 缺 OCR 识别包时的提示：内部代码（en_US、zh_CN）在 Windows 界面上根本看不到，玩家要照着
+# 设置里显示的语言名和标签才找得到。语言名放在文案目录里，和界面语言一起切换。
+OCR_PACK_KEYS = {"zh_CN": "ocr.pack.zh_cn", "en_US": "ocr.pack.en_us", "ja_JP": "ocr.pack.ja_jp"}
+
+
+def ocr_pack_name(lang: str | None) -> str:
+    """识别语言代码 → Windows 里显示的语言名和标签；目录里没有的代码原样返回，不猜。"""
+    code = ENGLISH_ALIASES.get(lang or "", lang or "")
+    key = OCR_PACK_KEYS.get(code)
+    return tr(key) if key else (code or "?")
+
+
+def ocr_unavailable_notice(lang: str | None) -> str:
+    """缺识别包时给玩家看的一句话：主界面、浮窗、托盘共用同一份，不各拼一遍。"""
+    return tr("warning.ocr_unavailable", language=ocr_pack_name(lang))

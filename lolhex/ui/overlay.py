@@ -20,7 +20,7 @@ from PySide6.QtGui import QColor, QCursor, QFont, QFontMetrics, QGuiApplication,
 from PySide6.QtWidgets import (QApplication, QHBoxLayout, QLabel, QLineEdit, QPushButton,
                                QVBoxLayout, QWidget)
 
-from .. import recommend
+from .. import i18n, recommend
 from ..data.metadata import display_augment_name, display_hero_name, display_hero_title
 from ..messages import tr
 from ..vision import window as win
@@ -835,7 +835,7 @@ class ControlPanel(QWidget):
         error = vision.get("error") or {}
         if error.get("code") == "ocr_unavailable":
             parts.append(f"<span style='color:#ff7a6b'>"
-                         f"{tr('warning.ocr_unavailable', language=error.get('language') or '?')}</span>")
+                         f"{i18n.ocr_unavailable_notice(error.get('language'))}</span>")
         if vision.get("blank"):
             parts.append(f"<span style='color:#ff7a6b'>{tr('warning.fullscreen')}</span>")
         parts.append(f"<span style='color:#8b93a7'>{data_status_html(snap.get('data', {}))}</span>")
@@ -879,7 +879,7 @@ class Overlay:
             self._ocr_notice_key = key
             notify = getattr(self, "notify", None)
             if key and key[0] == "ocr_unavailable" and notify:
-                notify(tr("warning.ocr_unavailable", language=key[1] or "?"))
+                notify(i18n.ocr_unavailable_notice(key[1]))
         if not getattr(self, "visible", True):
             return
         if snap.get("vision", {}).get("blank") and not getattr(self, "_blank_warned", False):

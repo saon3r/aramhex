@@ -35,8 +35,28 @@ def test_portable_text_points_at_this_fork_releases():
 def test_portable_text_says_updates_are_manual():
     low = _portable_text().lower()
     assert "no automatic update" in low or "no auto-update" in low
-    assert "download" in low and "replace" in low
+    assert "download" in low
     assert "userdata" in low and "uninstall" in low
+
+
+def test_portable_text_keeps_userdata_when_upgrading():
+    """升级说明必须保证 userdata（设置、日志、下载的数据）不跟着旧目录一起删掉。"""
+    low = _portable_text().lower()
+    assert "beside this folder" in low          # 新 ZIP 解到旧目录旁边，不是覆盖
+    assert "copy" in low and "userdata" in low
+    assert "only then delete" in low            # 先复制再删旧的
+    assert low.index("userdata") < low.index("only then delete")
+
+
+def test_readme_documents_the_safe_portable_upgrade():
+    """README 的便携版段落也要写清升级步骤（旧目录里的 userdata 才是玩家的东西）。"""
+    readme = (BUILD.parent.parent / "README.md").read_text(encoding="utf-8")
+    start = readme.index("**Portable**")
+    section = readme[start:readme.index("Either way,", start)].lower()
+    assert "userdata" in section
+    assert "copy" in section
+    assert "delete" in section
+    assert section.index("copy") < section.index("delete")
 
 
 def test_build_script_keeps_its_utf8_bom():
