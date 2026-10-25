@@ -7,7 +7,9 @@ build.ps1 据此拒绝生成安装包。夹具不放进入安装包：验收时�
 from __future__ import annotations
 
 import json
+import os
 import re
+import sys
 import traceback
 from pathlib import Path
 
@@ -100,6 +102,30 @@ def _fixture_check(fixture: str, engine) -> dict:
     return out
 
 
+def _bundle_check() -> dict:
+    """冻结后必须真的从安装目录加载，不能悄悄用开发机的源码树。
+
+    只看 frozen 不够：只要 sys.path 里混进了仓库目录，import 就会用到源码，安装包验收
+    就变得毫无意义。所以逐个数已加载的 lolhex 模块，看它们的文件在不在 exe 所在目录里。
+    """
+    frozen = bool(getattr(sys, "frozen", False))
+    exe_dir = Path(sys.executable).resolve().parent
+    loaded = {name: getattr(mod, "__file__", None) for name, mod in list(sys.modules.items())
+              if (name == "lolhex" or name.startswith("lolhex."))}
+    outside = sorted(name for name, file in loaded.items()
+                     if file and not str(Path(file).resolve()).startswith(str(exe_dir)))
+    pkg = Path(__file__).resolve().parent
+    return {
+        "frozen": frozen,
+        "python_exe": sys.executable,
+        "package_dir": str(pkg),
+        "package_inside_install": str(pkg).startswith(str(exe_dir)),
+        "modules_outside_install": outside,
+        "path_has_python": bool(os.environ.get("PATH") and any(
+            (Path(part) / "python.exe").exists() for part in os.environ["PATH"].split(os.pathsep) if part)),
+    }
+
+
 def run(report_path: str, fixture: str | None = None) -> int:
     report = {"success": False}
     try:
@@ -119,6 +145,7 @@ def run(report_path: str, fixture: str | None = None) -> int:
         app.processEvents()
         report.update(version=__version__, qt=qVersion(), platform=app.platformName(),
                       network_class=network.metaObject().className(), gui_ok=not pixmap.isNull())
+        report.update(_bundle_check())
         widget.close()
         report.update(_vision_check())
 

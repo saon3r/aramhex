@@ -43,3 +43,16 @@ def test_self_test_fails_loudly_without_a_fixture(store, tmp_path):
     assert code == 1 and report["success"] is False, report
     assert report.get("fixture_ok") is False, report
     assert report.get("fixture_error") == "fixture not found", report
+
+def test_self_test_reports_whether_it_is_frozen_and_where_lolhex_came_from(store, tmp_path):
+    """安装包验收靠这几个字段判断「真的用的是冻结代码」，字段本身也要有测试。"""
+    from lolhex import gui_selftest
+
+    report_path = tmp_path / "report.json"
+    gui_selftest.run(str(report_path), None)
+    report = json.loads(report_path.read_text(encoding="utf-8"))
+    assert report["frozen"] is False                       # 源码运行
+    assert report["package_dir"].endswith("lolhex")
+    # 源码运行时模块当然在「安装目录」之外；打包后这里必须是空的
+    assert isinstance(report["modules_outside_install"], list)
+    assert "lolhex" in report["modules_outside_install"] or report["package_inside_install"]
