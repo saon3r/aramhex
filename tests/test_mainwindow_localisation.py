@@ -57,7 +57,7 @@ def test_settings_dropdowns_are_english_not_producer_labels(store, tmp_path):
             "Low-end PC: slowest scanning, least CPU"]
         assert [window.set_lang.itemText(i) for i in range(window.set_lang.count())] == [
             "Chinese, Simplified & Traditional (CN, TW servers)",
-            "English (NA, EU and other servers)", "Japanese (JP server)", "Korean (KR server)"]
+            "English (NA, EU and other servers)", "Japanese (JP server)"]
         assert [window.set_corner.itemText(i) for i in range(window.set_corner.count())] == [
             "Top right", "Top left"]
         assert [window.set_badge.itemText(i) for i in range(window.set_badge.count())] == [

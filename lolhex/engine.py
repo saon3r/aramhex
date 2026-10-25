@@ -184,9 +184,7 @@ class Engine:
 
     def _apply_rec_model(self) -> None:
         from .vision.ocr import OCR
-        # 韩服识别模型下载（langpack）已移除：始终使用内置 RapidOCR 模型，不改识别启发式。
-        if self.settings.game_lang == "ko_KR":
-            log.warning("韩服识别模型下载已移除，使用内置识别模型（认不出韩文）")
+        # 韩服识别模型下载（langpack）已移除，韩服选项也去掉了：始终使用内置识别模型。
         OCR.use_rec_model(None)
 
     def reset_calibration(self) -> None:

@@ -132,6 +132,7 @@ def test_legacy_tencent_cache_keeps_keywords_but_never_tencent_icons(tmp_path, n
     assert "tm" in st.hero_terms("17") and "xjch" in st.hero_terms("17")   # 旧拼音关键词保留
     assert "gtimg" not in json.dumps(st.static, ensure_ascii=False)        # 腾讯图标/地址一律不复活
     assert st.spells["4"]["name"] == "Flash" and st.spells["4"]["icon"] == ""
+    # 旧腾讯缓存的装备名是中文：整条不带走（英文界面不能显示中文），等刷新补 Data Dragon 的名字
     assert st.items == {}
 
 

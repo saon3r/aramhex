@@ -147,3 +147,52 @@ def test_public_store_cannot_persist_an_incomplete_seed(tmp_path, no_network, mo
     disk = root / "static.json"
     assert not disk.exists() or not store_mod._valid_static(
         json.loads(disk.read_text(encoding="utf-8")))
+
+def test_reseed_keeps_item_names_from_an_older_schema(tmp_path):
+    """旧 schema 的缓存被重铺成新种子时，装备表要原样带走。
+
+    兜底表里没有装备（运行时才从 Data Dragon 取），重铺时丢掉的话，就地升级后的第一次
+    离线启动会把装备名显示成一串数字 ID，一直等到下一次元数据刷新。
+    """
+    root = tmp_path / "data"
+    root.mkdir()
+    old = store_mod._seed_static()
+    old["schema"] = store_mod.STATIC_SCHEMA - 1
+    old["items"] = {"1001": {"id": "1001", "name": "Boots", "plaintext": "Slightly faster.",
+                             "icon": "https://game.gtimg.cn/i.png"}}
+    (root / "static.json").write_text(json.dumps(old), encoding="utf-8")
+
+    store = DataStore(root)
+    assert store.static["schema"] == store_mod.STATIC_SCHEMA
+    assert store.static["items"]["1001"]["name"] == "Boots"
+    assert store.static["items"]["1001"]["icon"] == ""   # 腾讯图标地址不复活
+    # 换上的新缓存也要带上，不只是内存里的这一份
+    assert DataStore(root).static["items"]["1001"]["name"] == "Boots"
+
+def test_reseed_carries_english_names_but_never_chinese_ones(tmp_path, no_network):
+    """重铺种子时：装备/召唤师技能的英文名带走，中文名一律不带。
+
+    兜底表只有 8 个常用召唤师技能、没有装备；旧缓存里其余的英文名（Data Dragon 的）要留下，
+    否则界面上只剩「Spell 12」这种占位符。旧腾讯缓存里的中文名不能带进英文界面。
+    """
+    root = tmp_path / "data"
+    root.mkdir()
+    old = store_mod._seed_static()
+    old["schema"] = store_mod.STATIC_SCHEMA - 1
+    old["items"] = {
+        "1001": {"id": "1001", "name": "Boots", "price": 300},
+        "2001": {"id": "2001", "name": "\u978b\u5b50", "price": 300},      # 鞋子：旧腾讯中文名
+    }
+    old["spells"] = {
+        "4": {"id": "4", "name": "\u95ea\u73b0"},                        # 闪现：兜底表已经有 Flash
+        "12": {"id": "12", "name": "Teleport"},
+        "21": {"id": "21", "name": "\u969c\u788d"},                      # 障碍：中文，不要
+    }
+    (root / "static.json").write_text(json.dumps(old), encoding="utf-8")
+
+    st = DataStore(root)
+    assert st.static["items"]["1001"]["name"] == "Boots"
+    assert "2001" not in st.static["items"]                     # 中文装备名整条不要
+    assert st.static["spells"]["4"]["name"] == "Flash"          # 兜底表优先，不被旧值覆盖
+    assert st.static["spells"]["12"]["name"] == "Teleport"      # 旧英文名带走
+    assert st.static["spells"]["21"]["name"] == "Barrier"       # 兜底表有，就用兜底的
