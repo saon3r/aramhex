@@ -29,7 +29,7 @@ log = logging.getLogger(__name__)
 
 # 未校准时扫描的区域（相对窗口）：三张卡片都在屏幕中部。
 BAND = (0.12, 0.10, 0.88, 0.85)  # x0, y0, x1, y1
-DETECT_MAX_W = 1600               # 检测前把区域缩到这个宽度以内（4K 下约缩一半）
+DETECT_MAX_W = 1600               # 检测前把扫描带归一到这个宽度：放大缩小都做，识别引擎每次都拿到同样的像素
 REC_HEIGHT = 48                   # 识别前把标题块缩放到这个高度
 # 没有本机校准时先用的默认标题位置：国服 4K（16:9）实机多次校准的结果，按窗口比例。
 # 游戏界面按高度缩放、水平居中，其他宽高比按这个规律换算。猜错了也没关系：
@@ -80,6 +80,32 @@ def _resize(img: np.ndarray, scale: float) -> np.ndarray:
     h, w = img.shape[:2]
     interp = cv2.INTER_AREA if scale < 1 else cv2.INTER_CUBIC
     return cv2.resize(img, (max(1, int(w * scale)), max(1, int(h * scale))), interpolation=interp)
+
+
+def detect_scale(band_width: int) -> float:
+    """扫描带 → 送进 OCR 的缩放。固定宽度，放大缩小都做。
+
+    以前这里只缩小（min(1.0, …)）：4K/2560 缩到 1600，1920 送 1459，1600 送 1216，
+    1366 送 1039。同一个卡面在每个分辨率下喂给识别引擎的像素都不一样；1366 下实测
+    整张卡都认不出来（issue #22）。现在每个分辨率都得到 DETECT_MAX_W 宽。
+    """
+    return DETECT_MAX_W / max(1, band_width)
+
+
+def fit_width(img: np.ndarray, width: int) -> np.ndarray:
+    """把图缩放到恰好 width 宽（高度按比例）。缩小时用 AREA 防混叠，放大时用 LANCZOS4。
+
+    放大用 LANCZOS4 是量出来的：在一局真实游戏的 14 张有效卡面截图里，CUBIC / LINEAR
+    放大都会让 1600×900 那一档偶发少认出卡，LANCZOS4 四档全对。高度用截断而不是四舍
+    五入：4K 下和改动前的小数缩放得到完全相同的 1600×887，本机 4K 的识别像素一个字节
+    都没变。
+    """
+    import cv2
+    h, w = img.shape[:2]
+    if w == width:
+        return img
+    interp = cv2.INTER_AREA if width < w else cv2.INTER_LANCZOS4
+    return cv2.resize(img, (width, max(1, int(h * width / max(1, w)))), interpolation=interp)
 
 
 def fingerprint(img: np.ndarray) -> np.ndarray:
@@ -189,8 +215,8 @@ class AugmentDetector:
             self._pending = [None]*3
         x0, y0, x1, y1 = int(BAND[0] * W), int(BAND[1] * H), int(BAND[2] * W), int(BAND[3] * H)
         band = frame[y0:y1, x0:x1]
-        scale = min(1.0, DETECT_MAX_W / max(1, band.shape[1]))
-        lines = self.ocr.detect(_resize(band, scale))
+        scale = detect_scale(band.shape[1])
+        lines = self.ocr.detect(fit_width(band, DETECT_MAX_W))
         hits: list[tuple[TextLine, str, float]] = []
         for ln in lines:
             aid, sc = self.matcher.match(ln.text)
