@@ -1,7 +1,10 @@
 """打包后的程序入口（PyInstaller）。
 
-启动失败时（文件坏了、更新没装完整等）不弹英文的 "Unhandled exception"，改成中文提示，
-引导去官网下载安装包覆盖安装；错误写进 crash.log 方便排查。这里尽量少依赖程序本身，程序坏了也能弹出来。
+启动失败时（文件坏了、更新没装完整等）不弹 Python 的 "Unhandled exception"，改成英文提示，
+把错误写进 crash.log 方便排查。这里尽量少依赖程序本身，程序坏了也能弹出来。
+
+不引导去上游官网下载安装包：这是个人分支，上游的安装包装的是另一个程序（带遥测），
+所以只说清错误写在哪、设置没丢、以及怎么修（从仓库重新打包，见 docs/DEVELOPMENT.md）。
 """
 
 import os
@@ -9,7 +12,8 @@ import sys
 import time
 import traceback
 
-DOWNLOAD_PAGE = "https://aramhex.com/#download"
+TITLE = "AramHex ARAM Mayhem Companion"
+REPAIR_HINT = "Your settings and cached data are kept. To repair the installation, rebuild it from the project repository (see docs/DEVELOPMENT.md)."
 
 
 def _crash_log(text: str) -> str:
@@ -28,16 +32,12 @@ def _crash_log(text: str) -> str:
 
 def _crash(text: str) -> None:
     path = _crash_log(text)
-    msg = ("海克斯大乱斗助手打不开了。\n\n"
-           "请到官网下载安装包，直接覆盖安装就行（设置会保留）。\n\n"
-           "点「是」打开官网下载页。")
-    if path:
-        msg += f"\n\n错误记录：{path}"
+    msg = "AramHex could not start.\n\n"
+    msg += f"The error was written to:\n{path}\n\n" if path else "The error could not be written to crash.log.\n\n"
+    msg += REPAIR_HINT
     try:
         import ctypes
-        if ctypes.windll.user32.MessageBoxW(None, msg, "海克斯大乱斗助手", 0x4 | 0x10) == 6:  # 是/否 + 错误图标；6 = 是
-            import webbrowser
-            webbrowser.open(DOWNLOAD_PAGE)
+        ctypes.windll.user32.MessageBoxW(None, msg, TITLE, 0x0 | 0x10)  # 确定 + 错误图标
     except Exception:
         pass
 
