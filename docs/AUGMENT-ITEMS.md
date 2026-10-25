@@ -1,10 +1,17 @@
-# 海克斯装备建议（1.1.1）
+# Augment item suggestions (1.1.1)
 
-数据文件 `hero_augment_items.json` 是可选文件，须写入公开数据清单 `files`，带 SHA-256 和大小。文件没有、当前英雄没有配置或配置无效时，不显示空面板，也不拿普通出装榜代替。
+`hero_augment_items.json` is an optional data file. It must be listed in the public data
+manifest's `files` with its SHA-256 and size. If the file is missing, the current champion has
+no entry, or the entry is invalid, the panel is not shown at all — a generic item build is
+never substituted in its place.
 
-目前在命运之武器（3081）的三选一卡片上启用。装备建议和胜率标签上下错开；只在这张卡出现时显示，不判断玩家是否出装，不记住玩家是否选择了它。建议使用全体数据，避免分段后样本更少。
+It is currently enabled for the three offered cards of **Sword of Blossoming Dawn** (3081).
+The suggestion sits above the win-rate label rather than overlapping it, and only appears
+while that card is on screen. It does not assume the player has built anything, and it does
+not remember whether the card was taken. Suggestions use the all-ranks sample so that the
+numbers are not thinned further by score bands.
 
-结构是「英雄 ID → 海克斯 ID → 配置」：
+The shape is `champion ID → augment ID → config`:
 
 ```json
 {
@@ -21,13 +28,28 @@
 }
 ```
 
-这只是格式示例，不代表提莫的实际推荐。不要直接作为正式数据发布。
+This is a format example only. It is not a real recommendation for Teemo and must not be
+shipped as live data.
 
-- `source` 必填：`stats`（统计参考）、`community`（社区推荐）、`manual`（人工推荐）。人工维护此文件即可随数据更新下发，不需改程序。
-- `items` 按给定顺序展示，最多三件；重复装备跳过。客户端不按不稳定的小样本胜率自行排序。
-- `item` 是装备 ID（含模式专属 ID）。名字和图标从现有腾讯装备资料中取；不认识的装备可以另写 `name`，此时可能暂时只有文字。
-- 每件可以带整数 `games`、`wins`，客户端计算胜率。统计必须是当前英雄持有命运之武器时的装备样本，不能混入普通出装统计；结算装备不能证明购买顺序，统计发布时须说明口径。
-- 胜率非必填。配置的 `show_winrate: false` 隐藏全部胜率；单件也可以写 `show_winrate: false`。没有胜负数据时只显示装备，不虚构数字。
-- 图标加载复用现有装备缓存，后台下载；新增面板区域也登记到截图遮挡列表，防止识别自己的文字。
+- `source` is required: `stats` (derived from statistics), `community` (community
+  recommendation) or `manual` (hand-written). The file is data, so it can be maintained and
+  shipped with a routine data update without touching the program.
+- `items` are displayed in the given order, up to three. Duplicate items are skipped. The
+  client never re-sorts them by an unstable small-sample win rate.
+- `item` is an item ID, including mode-specific IDs. Names and icons come from Riot's item
+  metadata (Data Dragon, with CommunityDragon filling gaps). For an item that metadata does
+  not know, you can supply `name`; it may then render as text only for a while.
+- Each entry may carry integer `games` and `wins`, from which the client computes a win rate.
+  Those samples must come from games where the champion held Sword of Blossoming Dawn — they
+  must not be mixed with ordinary build statistics. End-of-game items cannot prove purchase
+  order, so publish the methodology alongside the numbers.
+- Win rates are optional. `show_winrate: false` on the config hides all of them; the same key
+  on a single item hides just that one. With no win/loss data, show the items and invent
+  nothing.
+- Icons reuse the existing item cache and download in the background. The new panel region is
+  registered in the capture-blocking list so the app cannot read its own text.
 
-数据在线更新沿用现有流程：官网 `.pack.xz` → 逐文件回退，清单逐文件校验。旧客户端会下载校验新增 JSON 后忽略，不影响使用。这里不改变线上格式和服务器。
+Online updates follow the existing path: the site's `.pack.xz`, then per-file fallback, with
+every file in the manifest verified individually. Older clients download and verify the new
+JSON, then ignore it, so it does not affect them. Nothing about the wire format or the server
+changes here.
