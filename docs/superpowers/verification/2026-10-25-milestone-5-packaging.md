@@ -59,6 +59,21 @@ Full run: **18/18 passed**.
    the script was UTF-8 without BOM, so 5.1 decoded its Chinese as ANSI. BOM added (honoured by
    both 5.1 and 7); recorded in AGENTS.md.
 
+## Live game in the frozen build (25 Oct)
+
+The ZIP was extracted to a clean folder, seeded with a warmed `userdata`, and run as
+`AramHex.exe --debug` for one full ARAM: Mayhem game.
+
+| Check | Result |
+|---|---|
+| Champion select | `PICK YOUR CHAMPION` read; starting cards read (115, 161); every offer attributed to the champion played (Hecarim) |
+| Three badges on an augment screen | pass — 17 offers; the app's own capture shows `POWER Best -3.0 · 57.9%`, `THRASH Viable -9.1 · 47.1%`, `DOOM Viable +1.0 · 62.9%` |
+| Module errors | 0 — 8,194 lines, no Traceback/ERROR/CRITICAL/Exception, no `ModuleNotFoundError` |
+| Per-game cost | strips 2,723 × 4 ms (CPU 3), full scans 44 × 90 ms (CPU 48) |
+| Captures | 17 written under the portable `userdata` |
+
+One known transient: a single offer briefly published one card as `unknown` and recovered.
+
 ## SmartScreen
 
 The exe is unsigned, so Windows will show "Windows protected your PC" on other machines or on
