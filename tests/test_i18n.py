@@ -119,7 +119,7 @@ def test_whole_screen_ocr_skips_one_char_lines(store, tmp_path, monkeypatch):
     m = NameMatcher({"98": "慎", "157": "亚索"}, 86.0)
     monkeypatch.setattr(eng, "_hero_matcher", lambda: m)
     lines = [TextLine("慎", 0.9, (0, 0, 60, 60)), TextLine("亚索", 0.9, (0, 100, 80, 130))]
-    monkeypatch.setattr(ocr.OCR, "get", classmethod(lambda cls: type("O", (), {"detect": lambda self, img: lines})()))
+    monkeypatch.setattr(ocr, "get_ocr", lambda *a, **k: type("O", (), {"detect": lambda self, img: lines})())
     picked = []
     monkeypatch.setattr(eng, "_set_hero_auto", lambda hid, src: picked.append(hid))
     eng._champ_select_ocr(np.zeros((200, 200, 3), np.uint8))

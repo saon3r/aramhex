@@ -100,6 +100,12 @@ Fanning out is allowed; shared state is not.
 - **Milestone 1 — verified.** Upstream runs unmodified on this client. The augment screen
   is proven against `tests/fixtures/real-mayhem-augment-screen.png`; the app launches.
   Champion select was the one unchecked item and was verified live in milestone 2.
+- **Milestone 3 — verified (issue #4).** OCR is now Windows.Media.Ocr: 3.4-4.2 ms per
+  three-card tick and 57-63 ms per 4K full scan (RapidOCR: 32-34 ms and 758-953 ms), 75 MB
+  of dependencies removed. Fixture reads 2016/2138/2088 with three badges; one live
+  `--debug` game had zero errors, 16 English offers, and the champion-select height
+  heuristic did not invert. Evidence:
+  `docs/superpowers/verification/2026-10-25-milestone-3-windows-ocr.md`.
 - **Milestone 2 — verified (issue #3).** English UI/catalog gates and the full suite pass
   (521 tests after the follow-up). Real ordinary refresh, cold/warm offline startup, fixture
   OCR, three badges, live bench recognition and one full English-client ARAM: Mayhem game are
@@ -168,7 +174,8 @@ These are the reason the fork exists. Do not trade them away:
 | `lolhex/engine.py` | Coordinator: data thread, observer thread, vision thread, state |
 | `lolhex/vision/window.py` | Win32 window discovery (`RiotWindowClass`, `RCLIENT`), DPI awareness |
 | `lolhex/vision/detector.py` | Finds the three cards, calibrates the layout |
-| `lolhex/vision/ocr.py` | **RapidOCR wrapper — the piece milestone 3 replaces** |
+| `lolhex/vision/ocr.py` | OCR entry point (`get_ocr`), `TextLine`; backend is `ocr_win.py` |
+| `lolhex/vision/ocr_win.py` | Windows.Media.Ocr backend: SoftwareBitmap from raw pixels, completion-handler wait |
 | `lolhex/vision/champselect.py` | Champion-select layout, fractions of the window |
 | `lolhex/vision/cardframe.py` | Pixel evidence for card rarity (silver/gold) |
 | `lolhex/vision/matcher.py` | Fuzzy name matching against the augment list |
@@ -251,14 +258,16 @@ CommunityDragon paths to regenerate bundled tables; they never import Tencent en
 - **Offscreen Qt has no usable fonts here.** `QT_QPA_PLATFORM=offscreen` renders text as boxes
   and positions `BadgeLayer` painting in logical pixels, so a badge render looks like a
   different, broken layout. Render with the windows platform and `layer.grab()`.
-- **RapidOCR has its own model downloader.** Null model paths can trigger direct
-  `modelscope.cn` requests if a bundled ONNX model is missing, empty or has a bad hash,
-  bypassing our HTTP boundary. Pin local Det/Rec/Cls paths and fail closed; tests must
-  simulate missing/corrupt models without altering the installed model files.
-  Explicit paths bypass the SDK's hash checker; invalid ONNX files and damaged character
-  metadata are regression-tested to fail locally without downloads. If a RapidOCR
-  upgrade renames models, update the pins deliberately; never
-  restore automatic downloads to make an upgrade work.
+- **OCR is Windows.Media.Ocr and needs the client language's recognizer pack.** `get_ocr()`
+  raises `OcrUnavailable` for a language Windows does not have (this machine: only `en-GB`),
+  because an English engine reading Chinese card faces returns nothing and looks like "OCR is
+  broken". Install the pack in Windows settings; the log names what is missing.
+- **Wait on WinRT without asyncio.** An asyncio loop creates a loopback socketpair on
+  Windows, which the offline acceptance test's no-socket guard reports as a connection. Use
+  the completion handler + `threading.Event` (see `ocr_win._wait`).
+- **WinRT line boxes are per word.** `line.words[0].bounding_rect` is the first word only;
+  union all word rectangles or `pick_my_hero`'s text-height heuristic (and card x-extents)
+  get the wrong numbers.
 
 ## How we work
 

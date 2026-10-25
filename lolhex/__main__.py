@@ -40,7 +40,7 @@ def _setup_logging(debug: bool) -> None:
                 RotatingFileHandler(home / "aramhex.log", maxBytes=20 * 1024 * 1024, backupCount=3, encoding="utf-8")]
     logging.basicConfig(level=logging.DEBUG if debug else logging.INFO, handlers=handlers,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s", force=True)
-    for noisy in ("urllib3", "RapidOCR"):
+    for noisy in ("urllib3",):
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
 
@@ -57,7 +57,8 @@ def _scan_image(engine, path: str, hero: str | None) -> int:
         return 2
     engine.store.refresh()
     from .engine import augment_matcher
-    det = AugmentDetector(augment_matcher(engine.store, engine.settings))
+    det = AugmentDetector(augment_matcher(engine.store, engine.settings),
+                         game_lang=getattr(engine.settings, "game_lang", "en_US"))
     offer = det.scan_full(img)
     if not offer:
         print("没有识别到三选一画面。")

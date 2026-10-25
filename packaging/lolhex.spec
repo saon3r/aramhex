@@ -1,6 +1,5 @@
 # PyInstaller 配置：海克斯大乱斗助手（onedir，无控制台窗口）。
 # 用法：pyinstaller packaging/lolhex.spec --noconfirm --distpath build/dist --workpath build/work
-from PyInstaller.utils.hooks import collect_data_files, collect_dynamic_libs
 import os
 import sys
 from pathlib import Path
@@ -8,7 +7,7 @@ from pathlib import Path
 sys.path.insert(0, str(Path(SPEC).parent))
 from binary_provenance import check_binary_sources
 
-datas = collect_data_files("rapidocr")  # OCR 模型（.onnx）与配置（.yaml）
+datas = []  # OCR 用系统引擎，不再打包 ONNX 模型
 datas += [("../lolhex/ui/icon.png", "lolhex/ui")]
 datas += [("../lolhex/data/hero_aliases.json", "lolhex/data")]  # 英雄别名（来源 Hexdata）
 datas += [("../lolhex/data/bundled", "lolhex/data/bundled")]  # 内置统计数据（scripts/update_data.py）
@@ -19,7 +18,9 @@ datas += [("../lolhex/data/messages.json", "lolhex/data")]
 datas += [("../lolhex/data/client_icons.json", "lolhex/data")]
 datas += [("../lolhex/data/hero_icons.json", "lolhex/data")]  # 腾讯英雄头像（scripts/update_hero_icons.py）
 datas += [("../lolhex/data/cacert.pem", "lolhex/data")]  # 根证书（去掉 eMudhra，scripts/make_cacert.py）  # 拳头客户端英雄头像（scripts/update_client_icons.py）
-binaries = collect_dynamic_libs("onnxruntime")
+# OCR 用 Windows 自带引擎：winrt 包自带 PyInstaller 钩子（winrt/__pyinstaller），
+# 这里只把延迟导入的那几个投影列成 hiddenimports，确保冻结后能加载。
+binaries = []
 
 a = Analysis(
     ["launcher.py"],
@@ -27,7 +28,12 @@ a = Analysis(
     binaries=binaries,
     datas=datas,
     hiddenimports=["lolhex.ui.overlay", "lolhex.vision.detector", "lolhex.vision.capture", "lolhex.vision.ocr",
+                   "lolhex.vision.ocr_win",
                    "lolhex.ui.mainwindow", "lolhex.ui.autostart",
+                   "winrt.windows.media.ocr", "winrt.windows.graphics.imaging",
+                   "winrt.windows.globalization", "winrt.windows.security.cryptography",
+                   "winrt.windows.storage.streams", "winrt.windows.foundation",
+                   "winrt.windows.foundation.collections",
                    "PySide6.QtNetwork"],
     excludes=["tkinter", "matplotlib", "IPython", "pytest"],
     noarchive=False,

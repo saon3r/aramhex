@@ -16,7 +16,7 @@ class _Image:
 class _Detector:
     calibration = None
 
-    def __init__(self, _matcher):
+    def __init__(self, _matcher, **_kwargs):   # 真检测器还接 game_lang 等参数
         pass
 
     def scan_full(self, _img):

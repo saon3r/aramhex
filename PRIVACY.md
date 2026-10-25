@@ -12,7 +12,8 @@ The application does not:
 - upload logs or diagnostic archives;
 - fetch remote configuration, notices, community links, rollout flags or forced settings;
 - look up a Riot ID / summoner rank;
-- self-update, patch its own files or download OCR language models;
+- self-update, patch its own files or download OCR models (recognition uses Windows' own
+  in-box OCR engine; nothing is downloaded or bundled for it);
 - send cookies, identifiers or tracking headers that it creates itself.
 
 Retired settings from older versions (`install_id`, `send_usage`, `logs_sent`,
