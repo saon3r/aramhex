@@ -34,15 +34,30 @@ Code candidate `1ba49e6`, rebuilt and checked on 25 October 2026:
 | Fresh local v1.1.4 portable build | Pass; unzipped note is English, points to this fork, and says to copy `userdata` into the new folder before deleting the old folder |
 | Fresh v1.1.4 frozen acceptance | 18/18 passed, without Python on PATH |
 | Independent security/privacy review | Approved; scoped re-review confirms safe portable upgrades, Windows OCR-pack notice and both-folder screenshot gate |
-| Ordinary non-debug live game; `shots/` and `screenshots/` unchanged | Pending; snapshot names, sizes and modification times in both folders before launch and after the game; verify no `debug.txt` in the application or data directory |
+| Ordinary non-debug live game; `shots/` and `screenshots/` unchanged | Pass; both folders' names, sizes and modification times match the pre-launch snapshot exactly; `shots/` stays empty and the 51 old debug captures are unchanged; no `debug.txt` in the application or data directory |
 
-This is not yet a release approval. No tag may be created until the remaining gates
-pass on the final candidate. A revised candidate must be rebuilt and rechecked.
+All pre-tag gates passed on this code candidate. A revised code candidate must be
+rebuilt and rechecked.
 
 Local ZIP SHA-256:
 `911fb2c60aa254871f2fb1d2e5ff740e0bd099a1737f276eb1351a60437a1c55`.
 The frozen acceptance was rerun after the final code/portable-note corrections;
 the earlier candidate's acceptance is not being reused.
+
+### Ordinary live game
+
+The frozen v1.1.4 application ran with `--minimized`, **without `--debug`**, from
+20:01 on 25 October 2026 until after the game ended at 20:22. The startup log confirms
+v1.1.4, 173 portraits and the Windows `en-GB` OCR recognizer. Both screenshot folders
+were snapshotted before launch and compared after the owner's game.
+
+- 13 published offers, including rerolls, all attributed to Samira.
+- One temporarily unrecognised third card recovered on the next publication, within
+  a second; no recognition-code changes are claimed by this repair.
+- Zero WARNING, ERROR, CRITICAL or traceback records during the run.
+- 2,856 strip checks averaged 3 ms; 38 full scans averaged 96 ms.
+- No screenshot was created, removed or modified in either folder.
+- The application and data directory had no `debug.txt` marker before or after.
 
 These checks do not certify anti-cheat approval or every possible Windows/monitor
 configuration. The executable is unsigned. Installed upgrades retain private settings
