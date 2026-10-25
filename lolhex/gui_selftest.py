@@ -1,4 +1,4 @@
-"""打包后的离线自检：在读配置、联网、启动工作线程之前，跑一遍 Qt 窗口、OpenCV、文字识别，
+r"""打包后的离线自检：在读配置、联网、启动工作线程之前，跑一遍 Qt 窗口、OpenCV、文字识别，
 以及（给了夹具时）真实截图 → 检测器 → 引擎 → 三张标签的整条链路。
 
 安装包精简时删掉了一些用不到的库文件；这里实际调用一遍要用的功能，删多了就会失败，
@@ -148,16 +148,16 @@ def run(report_path: str, fixture: str | None = None) -> int:
         report.update(_bundle_check())
         widget.close()
         report.update(_vision_check())
-
-        from .config import Settings
-        from .engine import Engine
-        engine = Engine(Settings.load())
-        report.update(_chrome_check(engine))
         if fixture:
+            # 只有验收时才碰设置和数据：build.ps1 的冒烟检查要在「数据坏了」的机器上也能跑
+            from .config import Settings
+            from .engine import Engine
+            engine = Engine(Settings.load())
+            report.update(_chrome_check(engine))
             report.update(_fixture_check(fixture, engine))
 
-        report["success"] = bool(report.get("gui_ok") and report.get("ocr_ok") and report.get("chrome_ok")
-                                 and (not fixture or report.get("fixture_ok")))
+        report["success"] = bool(report.get("gui_ok") and report.get("ocr_ok")
+                                 and (not fixture or (report.get("chrome_ok") and report.get("fixture_ok"))))
         if own_app:
             app.quit()
     except Exception:
