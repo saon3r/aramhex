@@ -5,9 +5,7 @@ numpy==2.5.3
 pillow==12.3.0
 mss==10.2.0
 opencv-python==5.0.0.93
-rapidocr==3.9.2
-onnxruntime==1.30.0
-# Windows.Media.Ocr：系统自带的识别引擎，OCR 的默认后端（RapidOCR 留作后备，对局通过后删除）
+# Windows.Media.Ocr：系统自带的识别引擎，不打包任何模型文件
 winrt-runtime==4.0.3
 winrt-Windows.Foundation==4!10.0.28000.2705
 winrt-Windows.Foundation.Collections==4!10.0.28000.2705

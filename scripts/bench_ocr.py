@@ -1,4 +1,4 @@
-"""测量两个 OCR 后端：走检测器真实路径，报耗时并打印每次读到的卡。
+"""测量 OCR 引擎：走检测器真实路径，报耗时并打印每轮读到的卡。
 
 用法（仓库根目录）：
 
@@ -27,7 +27,7 @@ sys.stdout.reconfigure(encoding="utf-8", errors="replace")  # cp1252 控制台�
 
 from lolhex.vision.detector import AugmentDetector, REC_HEIGHT, _resize  # noqa: E402
 from lolhex.vision.matcher import NameMatcher                            # noqa: E402
-from lolhex.vision.ocr import OCR, get_ocr                               # noqa: E402
+from lolhex.vision.ocr import get_ocr                                    # noqa: E402
 from lolhex.vision import window as winmod                               # noqa: E402
 from lolhex import data as data_pkg                                      # noqa: E402
 
@@ -40,18 +40,14 @@ def _matcher() -> NameMatcher:
                        72.0, min_margin=6.0)
 
 
-def _backend(which: str):
-    return get_ocr("en_US", engine=which)
-
-
 def bench(frame, label: str, rounds: int = 5) -> None:
     h, w = frame.shape[:2]
     matcher = _matcher()
     print(f"\n=== {label}  {w}x{h} ===")
-    for which, name in (("win", "Windows OCR"), ("rapid", "RapidOCR")):
+    for name in ("Windows OCR",):
         try:
-            backend = _backend(which)
-        except Exception as e:      # 没装 RapidOCR / 没有 Windows 语言包
+            backend = get_ocr("en_US")
+        except Exception as e:      # 没有对应的识别语言包
             print(f"  {name:12s} 不可用：{e}")
             continue
         det = AugmentDetector(matcher, None, ocr=backend)
@@ -103,7 +99,7 @@ def bench(frame, label: str, rounds: int = 5) -> None:
 
 
 def main() -> int:
-    ap = argparse.ArgumentParser(description="两个 OCR 后端的实测对比")
+    ap = argparse.ArgumentParser(description="OCR 引擎的实测耗时")
     ap.add_argument("--captures", help="含 *-offer.png 的对局截图目录（本地，不入库）")
     ap.add_argument("--rounds", type=int, default=5)
     args = ap.parse_args()

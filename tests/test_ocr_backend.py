@@ -1,6 +1,7 @@
-"""OCR 后端的选择：默认 Windows 引擎，可强制 RapidOCR，Windows 用不了时自动退回。
+"""OCR 后端：只有 Windows.Media.Ocr 一个实现，按界面语言缓存，缺语言包时明确报错。
 
-RapidOCR 在实机对局通过之前一直留着，就是靠这里的选择逻辑兜底。
+RapidOCR 已经删除；现在最危险的失败方式是「拿错语言的识别器」——中文客户端用英文引擎会
+一张卡都认不出，看起来就像 OCR 坏了。这里钉住它必须报错而不是硬撑。
 """
 
 import pytest
@@ -15,71 +16,66 @@ def _clean_engines():
     ocr.reset_engines()
 
 
-def _has_windows_engine() -> bool:
-    try:
-        from lolhex.vision.ocr_win import WinOCR
+def _installed() -> list[str]:
+    from lolhex.vision.ocr_win import available_languages
 
-        WinOCR("en_US")
-        return True
-    except Exception:
-        return False
+    return [tag.lower() for tag in available_languages()]
 
 
-def test_default_backend_is_the_windows_engine():
+def test_default_backend_is_the_system_engine():
     from lolhex.vision import ocr
 
+    if not any(tag.startswith("en") for tag in _installed()):
+        pytest.skip("这台机器没有英文识别包")
     inst = ocr.get_ocr("en_US")
-    if _has_windows_engine():
-        assert type(inst).__name__ == "WinOCR", "有 Windows 引擎时默认就该用它"
-    else:
-        pytest.skip("这台机器没有 Windows OCR 识别器")
-
-
-def test_env_can_force_rapidocr(monkeypatch):
-    from lolhex.vision import ocr
-
-    monkeypatch.setenv("ARAMHEX_OCR", "rapid")
-    assert type(ocr.get_ocr("en_US")).__name__ == "OCR"
-
-
-def test_windows_unavailable_falls_back_to_rapidocr(monkeypatch):
-    from lolhex.vision import ocr, ocr_win
-
-    def unavailable(_lang):
-        raise ocr_win.OcrUnavailable("no recognizer")
-
-    monkeypatch.setattr(ocr_win, "WinOCR", unavailable)
-    assert type(ocr.get_ocr("en_US")).__name__ == "OCR"
+    assert type(inst).__name__ == "WinOCR"
+    assert inst.language.lower().startswith("en")
 
 
 def test_same_language_reuses_one_engine():
     from lolhex.vision import ocr
 
+    if not any(tag.startswith("en") for tag in _installed()):
+        pytest.skip("这台机器没有英文识别包")
     assert ocr.get_ocr("en_US") is ocr.get_ocr("en_US")
-    assert ocr.get_ocr("en_US") is not ocr.get_ocr("zh_CN")
+    ocr.reset_engines()
+    assert ocr.get_ocr("en_US") is not None       # reset 之后重新建一个
 
-def test_missing_language_pack_never_uses_a_wrong_script_engine():
-    """中文/日文客户端但没装对应识别包时，必须退回 RapidOCR，不能拿英文引擎凑数。
 
-    英文引擎认不了中文卡面，结果是一张卡都认不出——看起来就像「OCR 坏了」。
-    """
+def test_missing_language_pack_raises_instead_of_reading_nothing():
+    """没有中文识别包时：宁可报错（这一局没有标签），也不能拿英文引擎硬认中文。"""
     from lolhex.vision import ocr
+    from lolhex.vision.ocr_win import OcrUnavailable
 
-    inst = ocr.get_ocr("zh_CN")
-    if type(inst).__name__ == "WinOCR":
-        assert inst.language.lower().startswith("zh"), f"中文客户端拿到 {inst.language}"
-    else:
-        assert type(inst).__name__ == "OCR"
+    if any(tag.startswith("zh") for tag in _installed()):
+        pytest.skip("这台机器装了中文识别包")
+    with pytest.raises(OcrUnavailable):
+        ocr.get_ocr("zh_CN")
 
 
-def test_winocr_refuses_a_mismatched_recognizer():
-    from lolhex.vision import ocr_win
+def test_failed_engine_is_not_cached():
+    """装语言包之前失败过，装好之后（reset 或换语言）要能重新成功。"""
+    from lolhex.vision import ocr, ocr_win
 
-    installed = [tag.lower() for tag in ocr_win.available_languages()]
-    if any(tag.startswith("zh") for tag in installed):
-        pytest.skip("这台机器装了中文识别包，构造不出「语言包缺失」")
-    with pytest.raises(ocr_win.OcrUnavailable):
-        ocr_win.WinOCR("zh_CN")
+    calls = {"n": 0}
+    real = ocr_win.WinOCR
+
+    def flaky(lang):
+        calls["n"] += 1
+        if calls["n"] == 1:
+            raise ocr_win.OcrUnavailable("first try fails")
+        return real(lang)
+
+    try:
+        with pytest.MonkeyPatch.context() as mp:
+            mp.setattr(ocr_win, "WinOCR", flaky)
+            with pytest.raises(ocr_win.OcrUnavailable):
+                ocr.get_ocr("en_US")
+            if not any(tag.startswith("en") for tag in _installed()):
+                pytest.skip("这台机器没有英文识别包")
+            assert type(ocr.get_ocr("en_US")).__name__ == "WinOCR"
+    finally:
+        pass
 
 
 def test_language_switch_reaches_the_detector(store, tmp_path):
@@ -88,10 +84,9 @@ def test_language_switch_reaches_the_detector(store, tmp_path):
 
     from lolhex.config import Settings
     from lolhex.engine import Engine
-    from lolhex.vision.ocr import get_ocr
 
     engine = Engine(Settings(), home=tmp_path, store=store)
-    engine._detector = SimpleNamespace(game_lang="en_US", _ocr=get_ocr("en_US"),
+    engine._detector = SimpleNamespace(game_lang="en_US", _ocr=object(),
                                        set_matcher=lambda _m: None, _last_fp=object())
     engine.set_game_lang("zh_CN")
     assert engine.settings.game_lang == "zh_CN"

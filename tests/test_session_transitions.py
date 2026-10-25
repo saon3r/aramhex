@@ -117,8 +117,7 @@ def test_detector_pixel_cache_does_not_reuse_old_screen_coordinates():
     from lolhex.vision.detector import AugmentDetector
     from lolhex.vision.matcher import NameMatcher
     from lolhex.vision.window import Rect
-    det = AugmentDetector(NameMatcher({"1": "虚幻武器"}), ocr=__import__(
-        "lolhex.vision.ocr", fromlist=["OCR"]).OCR.get())  # 合成中文卡面：固定用 RapidOCR
+    det = AugmentDetector(NameMatcher({"1": "虚幻武器"}))
     det.ensure_calibration(1920, 1080)
     class OCR:
         def recognize(self, image):

@@ -1,7 +1,7 @@
 """Windows.Media.Ocr 后端：用系统自带的识别引擎，不再打包 ONNX 模型。
 
-和 RapidOCR 后端（vision/ocr.py）暴露同样的两个方法，`TextLine` 也是同一个结构，所以
-检测器和选人界面不用改。差别只在这里：
+对外接口就是 vision/ocr.py 里的 `get_ocr()`：两个方法、同一个 `TextLine`，
+检测器和选人界面不需要知道用的是哪个引擎。要点：
 
 - 识别是 WinRT 异步 API：用完成回调 + 线程事件等它结束，**不用 asyncio**。
   asyncio 在 Windows 上会给每个事件循环建一个 loopback socketpair，会被「验收测试禁止
@@ -76,7 +76,7 @@ class WinOCR:
                 break
         if engine is None:
             # 客户端语言的识别包没装就不要拿别的语言凑数：英文引擎认不了中文卡面，
-            # 结果是一张卡都认不出，而且看起来像「OCR 坏了」。抛出去让上层退回 RapidOCR。
+            # 结果是一张卡都认不出，而且看起来像「OCR 坏了」。抛出去让调用方记日志并跳过这一局。
             raise OcrUnavailable(
                 f"no Windows OCR recognizer for {game_lang!r}; installed: {available_languages()}")
         got = engine.recognizer_language.language_tag

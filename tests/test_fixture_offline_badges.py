@@ -147,4 +147,4 @@ def test_fixture_offline_three_badges(connect_attempts, store, no_network, tmp_p
         # 只用到校准框上侧的留白（(y1-y0)*2/9），不压标题文字
         assert r.bottom <= y0 + (y1 - y0) * 2 / 9 + 4
 
-    assert connect_attempts == []   # 全程没有任何外连尝试（RapidOCR 模型也是本地的）
+    assert connect_attempts == []   # 全程没有任何外连尝试：系统 OCR 引擎，本地模型也不用下载

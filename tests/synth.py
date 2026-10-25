@@ -1,4 +1,6 @@
-"""合成海克斯三选一画面，用于在没有游戏截图时测试识别流程。"""
+"""合成海克斯三选一画面，用于在没有游戏截图时测试识别流程。
+
+卡面文字默认用英文：默认 OCR 是系统引擎（英文识别器），认不了中文。"""
 
 from __future__ import annotations
 
@@ -24,7 +26,7 @@ def fonts_available() -> bool:
 
 
 def render_offer(names: list[str | None], size=(3840, 2160), seed: int = 0,
-                 desc: str = "获得1个随机强化符文。") -> np.ndarray:
+                 desc: str = "Gain a random augment.") -> np.ndarray:
     """返回 BGR 图。names 中 None 表示该位置不画卡。卡片按屏幕中心对称排布。"""
     W, H = size
     rng = np.random.default_rng(seed)

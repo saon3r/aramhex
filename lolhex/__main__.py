@@ -40,7 +40,7 @@ def _setup_logging(debug: bool) -> None:
                 RotatingFileHandler(home / "aramhex.log", maxBytes=20 * 1024 * 1024, backupCount=3, encoding="utf-8")]
     logging.basicConfig(level=logging.DEBUG if debug else logging.INFO, handlers=handlers,
                         format="%(asctime)s %(levelname)s %(name)s: %(message)s", force=True)
-    for noisy in ("urllib3", "RapidOCR"):
+    for noisy in ("urllib3",):
         logging.getLogger(noisy).setLevel(logging.WARNING)
 
 
