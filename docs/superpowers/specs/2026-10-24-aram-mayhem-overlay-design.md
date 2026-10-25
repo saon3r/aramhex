@@ -129,6 +129,23 @@ exact champion ids, the bench, and `localPlayerCellId` — no guessing.
 This is additive and reversible, and it does not weaken the "no memory, no injection,
 no input synthesis" position.
 
+**Rejected after measuring, 25 October 2026.** A read-only probe during a real ARAM:
+Mayhem champion select (queueId 2400) settled the question the plan assumed away: the
+champion offer is not in the API. When the client showed three champion cards (157, 32,
+350) the session payload contained none of them — 0 occurrences of each id — and
+`benchChampions` held two different champions (127, 42). Only after the player locked did
+`myTeam[4].championId` become 157; the unchosen 32 and 350 then reappeared in
+`benchChampions`. `theirTeam` was all zeros for the whole champion select, so even the enemy
+team is not exposed. What the API gives exactly is `localPlayerCellId`, per-player
+`championId` once locked, `benchChampions` (with `isPriority`), pick `actions`,
+`spell1Id`/`spell2Id` and `queueId`.
+
+So the only gain would be making exact what screen reading already gets right — the owner's
+champion (Talon, then Yi in two live games) and the bench (7/7) — at the cost of a new
+"reads the client API" trust claim, lockfile/token handling, breakage when the client runs
+elevated, and rewrites of README, PRIVACY, AGENTS and About. Rejected; screen reading stays
+the only input.
+
 ### 5.3 Smaller bundle
 
 After 5.1, the ONNX runtime and PaddleOCR models are gone. Expected packaged size falls
@@ -199,7 +216,8 @@ aramhex share numeric augment ids — all 232 aramhex augments resolve. No name 
    tool exists at the end of this step.
 3. **Make it fast.** WinRT OCR behind an interface; verify the bundle shrinks and the CPU
    cost drops.
-4. **Make it precise.** LCU fast path for champion select, with screen reading as fallback.
+4. ~~**Make it precise.**~~ LCU fast path for champion select — **rejected**, see §5.2:
+   the offer is not in the API.
 5. **Package.** Single portable build, About/attribution, calibration dump.
 
 Each milestone ends with something runnable.
@@ -219,5 +237,7 @@ Each milestone ends with something runnable.
 - **English-only UI**, matching the client.
 - **No telemetry, no remote control** of any kind.
 - **Chinese stats accepted and labelled**, because no EUW source exists (§8.1, §8.3).
-- **Client API allowed** for champion select, against upstream's principle, because this
-  is a personal tool and exact ids beat font-height guessing.
+- **Client API rejected** (§5.2) after a live probe: the champion offer is not in the
+  session, so the API would only make exact what screen reading already got right, in
+  exchange for a new trust claim and token handling. An earlier draft of this list allowed
+  it; the probe reversed that.
