@@ -13,7 +13,7 @@ def test_full_scan_does_not_cover_titles_and_complete_offer_stays_put(size, coun
     from lolhex.engine import Engine
     from lolhex.ui.overlay import BadgeLayer
     from lolhex.vision import window
-    from lolhex.vision.detector import AugmentDetector, BAND, DETECT_MAX_W
+    from lolhex.vision.detector import AugmentDetector, BAND, detect_scale
     from lolhex.vision.matcher import NameMatcher
     from lolhex.vision.ocr import TextLine
     app = QApplication.instance() or QApplication([])
@@ -26,7 +26,7 @@ def test_full_scan_does_not_cover_titles_and_complete_offer_stays_put(size, coun
     raw_top = round(450 * unit)
     raw_bottom = round(480 * unit)
     band_x, band_y = int(BAND[0]*width), int(BAND[1]*height)
-    scale = min(1.0, DETECT_MAX_W / (int(BAND[2]*width)-band_x))
+    scale = detect_scale(int(BAND[2]*width)-band_x)
     class OCR:
         def detect(self, image):
             result = []
