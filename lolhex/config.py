@@ -106,7 +106,8 @@ class Settings:
     last_version: str = ""
     # 第一次打开时的「请把游戏设成无边框」提示，看过就不再弹
     seen_welcome: bool = False
-    # 游戏客户端的语言（外服）：zh_CN 中文（国服，繁中台服也认）/ en_US / ja_JP / ko_KR，见 i18n.py。
+    # 游戏客户端的语言（外服）：zh_CN 中文（国服，繁中台服也认）/ en_US / ja_JP，见 i18n.py。
+    # 韩服选项已移除（没有韩文识别模型），老设置文件里的 ko_KR 读到时按 en_US 处理。
     # 新鲜的设置默认按英文客户端识别；游戏里显式选过的语言保留。
     game_lang: str = "en_US"
     extra: dict = field(default_factory=dict)

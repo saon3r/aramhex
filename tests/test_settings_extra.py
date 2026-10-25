@@ -65,7 +65,7 @@ def test_load_config_with_bom(tmp_path):
     p = tmp_path / "config.json"
     p.write_bytes(b"\xef\xbb\xbf" + '{"game_lang": "ko_KR", "send_usage": false, "install_id": "0123456789abcdef"}'.encode())
     s = Settings.load(p)
-    assert s.game_lang == "ko_KR"
+    assert s.game_lang == "en_US"   # ko_KR 已移除：老文件读到时按英文客户端
     assert not hasattr(s, "send_usage") and not hasattr(s, "install_id")
     assert "send_usage" not in s.extra and "install_id" not in s.extra
 

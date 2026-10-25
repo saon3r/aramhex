@@ -14,7 +14,9 @@ def test_names_by_language():
     assert i18n.augment_names("en_US")["1305"] == "Leg Day"
     assert i18n.traditional_augment_names()["1305"] == "腿部訓練日"   # 繁中是另一套译名，不是简转繁
     assert i18n.normalize_lang("zh_TW") == "zh_CN" and i18n.augment_names("zh_TW") == {}  # 繁中并进了中文
-    assert i18n.augment_names("ko_KR")["1305"] == "하체 운동의 날"
+    # 韩服选项已移除：留着 ko_KR 的老设置文件按英文客户端处理，不再认韩文名字
+    assert i18n.normalize_lang("ko_KR") == "en_US" and i18n.augment_names("ko_KR")["1305"] == "Leg Day"
+    assert "ko_KR" not in i18n.LANG_CODES
     assert i18n.hero_names("ja_JP")["157"][0] == "ヤスオ"
     assert i18n.ui_text("bench", "zh_CN") == "可用"
     assert i18n.ui_text("bench", "en_US") == "Available Champions"
@@ -29,8 +31,8 @@ def test_augment_matcher_uses_game_language():
     assert cn.match("腿部訓練日")[0] == "1305"      # 中文模式也认繁中（台服）的名字
     en = augment_matcher(store, SimpleNamespace(game_lang="en_US", match_threshold=72.0))
     assert en.match("Leg Day")[0] == "1305" and en.match("Giant Slayer")[0] == "1195"
-    ko = augment_matcher(store, SimpleNamespace(game_lang="ko_KR", match_threshold=72.0))
-    assert ko.match("하체 운동의 날")[0] == "1305"
+    retired = augment_matcher(store, SimpleNamespace(game_lang="ko_KR", match_threshold=72.0))
+    assert retired.match("Leg Day")[0] == "1305"   # 老设置里的 ko_KR 按英文客户端处理
 
 
 def test_matcher_several_names_and_short_english():

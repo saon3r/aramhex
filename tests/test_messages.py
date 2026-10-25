@@ -42,7 +42,7 @@ REQUIRED_KEYS = (
     "format.date.day_month", "format.month.1", "format.month.10", "format.month.12",
     # 设置下拉框标签（后面 UI 按 code 取，生产者文件本轮不改）
     "settings.speed.standard", "settings.speed.saver", "settings.speed.low",
-    "settings.lang.zh_cn", "settings.lang.en_us", "settings.lang.ja_jp", "settings.lang.ko_kr",
+    "settings.lang.zh_cn", "settings.lang.en_us", "settings.lang.ja_jp",   # ko_kr 随韩服选项一起移除
     "settings.badge.top", "settings.badge.bottom", "settings.badge_position",
     # 署名（About 现在是英文写死，键先放进目录，UI 转换时按 code 取）
     "about.product", "about.portable", "about.upstream", "about.stats", "about.disclaimer",

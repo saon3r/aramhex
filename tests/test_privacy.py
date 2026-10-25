@@ -83,9 +83,12 @@ def test_game_lang_defaults_to_english_recognition(tmp_path):
     assert Settings.load(p).game_lang == "en_US"
     p.write_text(json.dumps({"speed": "low"}), encoding="utf-8")   # 老设置文件没有 game_lang
     assert Settings.load(p).game_lang == "en_US"
-    for explicit in ("zh_CN", "ko_KR", "ja_JP", "en_US"):
+    for explicit in ("zh_CN", "ja_JP", "en_US"):
         p.write_text(json.dumps({"game_lang": explicit}), encoding="utf-8")
         assert Settings.load(p).game_lang == explicit
+    # 韩服选项已移除（没有韩文识别模型）：老文件里的 ko_KR 不能留在设置里
+    p.write_text(json.dumps({"game_lang": "ko_KR"}), encoding="utf-8")
+    assert Settings.load(p).game_lang == "en_US"
 
 
 def _publish(root: Path, snapshot_at: str, patch: str = "16.20") -> dict:
