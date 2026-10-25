@@ -44,6 +44,16 @@ python -m venv .venv
 
 打包和发版见 [docs/DEVELOPMENT.md](docs/DEVELOPMENT.md)。
 
+## 自己打包
+
+```powershell
+powershell -NoProfile -File packaging\build.ps1 -PortableOnly
+```
+
+产物在 `build/release/`：`AramHex-Portable-<版本>.zip`（一个文件夹，解压即用，不是单文件）。
+程序没有签名，Windows 可能提示「已保护你的电脑」：点「更多信息」→「仍要运行」。这是正常的，
+不要为此关掉 SmartScreen。识别用的是 Windows 自带的文字识别，非英文客户端要先装对应语言的识别包。
+
 ## 协议
 
 程序代码 [MIT](LICENSE)；统计数据 [CC BY-NC 4.0](https://github.com/czgreat/aramhex-data/blob/main/LICENSE)；第三方组件见 [NOTICE.md](NOTICE.md)。

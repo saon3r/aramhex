@@ -100,6 +100,11 @@ Fanning out is allowed; shared state is not.
 - **Milestone 1 — verified.** Upstream runs unmodified on this client. The augment screen
   is proven against `tests/fixtures/real-mayhem-augment-screen.png`; the app launches.
   Champion select was the one unchecked item and was verified live in milestone 2.
+- **Milestone 5 — verified (issue #6).** One-folder PyInstaller build plus the portable ZIP
+  (75 MB); `scripts/accept_packaged.py` runs the frozen app with no Python on PATH and passes
+  **18/18**, including "no module loaded from outside the install", fixture OCR to three
+  badges, English chrome, the crash dialog and the missing-recognizer message. Evidence:
+  `docs/superpowers/verification/2026-10-25-milestone-5-packaging.md`.
 - **Milestone 3 — verified (issue #4).** OCR is now Windows.Media.Ocr: 3.4-4.2 ms per
   three-card tick and 57-63 ms per 4K full scan (RapidOCR: 32-34 ms and 758-953 ms), 75 MB
   of dependencies removed. Fixture reads 2016/2138/2088 with three badges; one live
@@ -262,6 +267,12 @@ CommunityDragon paths to regenerate bundled tables; they never import Tencent en
   raises `OcrUnavailable` for a language Windows does not have (this machine: only `en-GB`),
   because an English engine reading Chinese card faces returns nothing and looks like "OCR is
   broken". Install the pack in Windows settings; the log names what is missing.
+- **RapidOCR has been removed** — see the milestone-3 record. OCR is `get_ocr()` on
+  Windows.Media.Ocr; there is no bundled model and no fallback backend.
+- **PowerShell 5.1 needs a UTF-8 BOM to read a `.ps1` with Chinese.** There is no `pwsh` on
+  this machine, and a BOM-less script is decoded as ANSI, which fails to parse (`Unexpected
+  token`). `packaging/build.ps1` keeps a BOM for that reason; add one to any new script with
+  non-ASCII text and say so in its header.
 - **Wait on WinRT without asyncio.** An asyncio loop creates a loopback socketpair on
   Windows, which the offline acceptance test's no-socket guard reports as a connection. Use
   the completion handler + `threading.Event` (see `ocr_win._wait`).

@@ -1,4 +1,4 @@
-# 打包：PyInstaller 生成程序目录 → GUI 自检 → Inno Setup 安装版 + 便携版 ZIP + SHA256SUMS.txt。
+﻿# 打包：PyInstaller 生成程序目录 → GUI 自检 → Inno Setup 安装版 + 便携版 ZIP + SHA256SUMS.txt。
 # 用法（PowerShell 7）：pwsh -NoProfile -File packaging/build.ps1 [-PythonExe <python>] [-InnoCompiler <ISCC.exe>] [-PortableOnly]
 # -PortableOnly：只出便携版（测试版自己用，不需要 Inno Setup）
 # 输出：build/release/AramHex-Setup-<版本>.exe、AramHex-Portable-<版本>.zip、SHA256SUMS.txt

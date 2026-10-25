@@ -29,7 +29,7 @@ def test_gui_selftest_precedes_settings_and_engine(tmp_path, monkeypatch):
     from lolhex import __main__, gui_selftest
     monkeypatch.setattr(__main__.Settings, "load", lambda: pytest.fail("settings/data access in GUI smoke"))
     seen = []
-    monkeypatch.setattr(gui_selftest, "run", lambda path: seen.append(path) or 0)
+    monkeypatch.setattr(gui_selftest, "run", lambda path, fixture=None: seen.append(path) or 0)
     report = str(tmp_path / "gui.json")
     assert __main__.main(["--self-test-gui", report]) == 0
     assert seen == [report]
