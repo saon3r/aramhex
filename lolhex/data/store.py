@@ -149,8 +149,36 @@ def _usable_records(parsed, family: str) -> dict:
     return parsed
 
 
+def _carry_items(legacy: dict | None) -> dict[str, dict]:
+    """旧缓存里的装备表：只带走能安全显示的部分。
+
+    兜底表没有装备，重铺种子时丢掉会让装备名变成数字 ID；但旧版本可能存着腾讯的图标
+    地址（game.gtimg.cn），那类地址不再允许，一律清空，等下一次元数据刷新再补。
+    """
+    out: dict[str, dict] = {}
+    for iid, rec in _records(_table(legacy).get("items")).items():
+        name = str(rec.get("name") or "").strip()
+        if not name:
+            continue
+        key = str(rec.get("id") or iid)
+        icon = str(rec.get("icon") or "")
+        out[key] = {
+            "id": key,
+            "name": name,
+            "desc": str(rec.get("desc") or rec.get("plaintext") or ""),
+            "price": rec.get("price"),
+            "icon": icon if icon.startswith(metadata.DDRAGON_BASE + "/") else "",
+        }
+    return out
+
+
 def _seed_static(legacy: dict | None = None) -> dict:
-    """无缓存/坏缓存时的完整种子：随程序的公开表 + i18n；只迁移旧缓存里安全的中文补充。"""
+    """无缓存/坏缓存时的完整种子：随程序的公开表 + i18n；只迁移旧缓存里安全的中文补充。
+
+    装备表是例外：兜底表里没有装备（运行时从 Data Dragon 取），旧缓存里的英文名/图标
+    一律原样带走。否则旧版本就地升级后第一次离线启动，装备名会退化成一串数字 ID，
+    一直等到下一次元数据刷新才恢复。
+    """
     fb = metadata.static_fallback()
     fb_heroes = _table(fb.get("heroes"))
     fb_augs = _table(fb.get("augments"))
@@ -206,6 +234,8 @@ def _seed_static(legacy: dict | None = None) -> dict:
     for sid, rec in _records(legacy.get("spells")).items():
         spells.setdefault(sid, {"id": sid, "name": f"Spell {sid}", "icon": ""})
 
+    items = _carry_items(legacy)
+
     return {
         "schema": STATIC_SCHEMA,
         "fetched_at": 0,
@@ -213,7 +243,7 @@ def _seed_static(legacy: dict | None = None) -> dict:
         "versions": [{"name": version}] if version else [],
         "heroes": heroes,
         "augments": augments,
-        "items": {},
+        "items": items,
         "spells": spells,
         "families": {},
         # 兜底表缺失时种子只剩 i18n 名字，来源要如实写，不能假装完整的 static_fallback。

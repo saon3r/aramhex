@@ -147,3 +147,24 @@ def test_public_store_cannot_persist_an_incomplete_seed(tmp_path, no_network, mo
     disk = root / "static.json"
     assert not disk.exists() or not store_mod._valid_static(
         json.loads(disk.read_text(encoding="utf-8")))
+
+def test_reseed_keeps_item_names_from_an_older_schema(tmp_path):
+    """旧 schema 的缓存被重铺成新种子时，装备表要原样带走。
+
+    兜底表里没有装备（运行时才从 Data Dragon 取），重铺时丢掉的话，就地升级后的第一次
+    离线启动会把装备名显示成一串数字 ID，一直等到下一次元数据刷新。
+    """
+    root = tmp_path / "data"
+    root.mkdir()
+    old = store_mod._seed_static()
+    old["schema"] = store_mod.STATIC_SCHEMA - 1
+    old["items"] = {"1001": {"id": "1001", "name": "Boots", "plaintext": "Slightly faster.",
+                             "icon": "https://game.gtimg.cn/i.png"}}
+    (root / "static.json").write_text(json.dumps(old), encoding="utf-8")
+
+    store = DataStore(root)
+    assert store.static["schema"] == store_mod.STATIC_SCHEMA
+    assert store.static["items"]["1001"]["name"] == "Boots"
+    assert store.static["items"]["1001"]["icon"] == ""   # 腾讯图标地址不复活
+    # 换上的新缓存也要带上，不只是内存里的这一份
+    assert DataStore(root).static["items"]["1001"]["name"] == "Boots"

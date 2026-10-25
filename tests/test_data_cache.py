@@ -132,7 +132,8 @@ def test_legacy_tencent_cache_keeps_keywords_but_never_tencent_icons(tmp_path, n
     assert "tm" in st.hero_terms("17") and "xjch" in st.hero_terms("17")   # 旧拼音关键词保留
     assert "gtimg" not in json.dumps(st.static, ensure_ascii=False)        # 腾讯图标/地址一律不复活
     assert st.spells["4"]["name"] == "Flash" and st.spells["4"]["icon"] == ""
-    assert st.items == {}
+    # 装备名保住（重铺种子不再丢整张装备表），但腾讯图标地址清空，等刷新补 Data Dragon 的
+    assert st.items["1001"]["name"] == "鞋子" and st.items["1001"]["icon"] == ""
 
 
 def test_family_failure_keeps_last_good_family_and_records_error(tmp_path):
