@@ -1,8 +1,7 @@
 # Privacy
 
 AramHex is a personal, screen-reading overlay for League of Legends ARAM: Mayhem. This
-document describes the current data behaviour and network scope, and names the one check
-that has not been performed (a frozen executable build).
+document describes the current data behaviour, network scope and verification status.
 
 ## No telemetry, identity or remote control
 
@@ -24,8 +23,11 @@ settings file is loaded and are never written back.
 
 Settings, logs, caches and optional debug screenshots are stored under `%APPDATA%\AramHex`
 (installed build) or the application's `userdata` directory (portable build). They stay on
-this machine. Debug screenshots are produced only when debug mode is explicitly enabled.
-Nothing in that local data is uploaded by the application.
+this machine. Diagnostic screenshots, including augment-offer captures, are produced only
+when debug mode is explicitly enabled. They can contain player names or chat, so treat them
+as private. Earlier builds also saved up to three offer captures during ordinary runs;
+those existing files are not automatically deleted. Nothing in that local data is uploaded
+by the application.
 
 ## Anonymous stats download
 
@@ -60,9 +62,14 @@ a failed or malformed refresh keeps the last valid cache and the bundled fallbac
 - Ordinary background refresh, both warm-cache and fresh bundled-only startup, real fixture
   OCR with three rendered badges, live champion-select/bench recognition and one full
   English-client game have all been verified through the real application entry point,
-  including network-denied runs. Details are recorded in
-  `docs/superpowers/verification/2026-10-24-milestone-2.md`. This is not a claim that a
-  frozen executable has been built.
+  including network-denied runs.
+- The published v1.1.3 portable executable passed all 18 packaged acceptance checks on
+  25 October 2026, including execution without Python on PATH, English UI, fixture OCR,
+  three rendered badges, offline warm startup and the missing-recognizer diagnostic.
+  A full live game with the packaged application was verified during the packaging
+  milestone. See the [packaging verification record](docs/verification/packaging.md).
+  A replacement release must pass fresh acceptance, including a normal (non-debug)
+  game that creates no diagnostic screenshots, before it is published.
 
 ## Attribution and licence boundaries
 

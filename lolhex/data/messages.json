@@ -201,7 +201,8 @@
     "vision.idle": "Idle",
     "vision.paused": "Paused - game not in the foreground",
     "vision.scanning": "Scanning",
-    "warning.fullscreen": "The game may be in full-screen mode, which cannot be captured. In the game settings, set Window Mode to Borderless or Windowed."
+    "warning.fullscreen": "The game may be in full-screen mode, which cannot be captured. In the game settings, set Window Mode to Borderless or Windowed.",
+    "warning.ocr_unavailable": "Windows OCR cannot read this client language ({language}): its recogniser pack is missing. Install it in Windows Settings; recognition stays off until then."
   },
   "zh_CN": {
     "about.disclaimer": "Stats are collected from the Chinese (CN) server. Unofficial tool, not affiliated with Tencent or Riot Games.",
@@ -405,6 +406,7 @@
     "vision.idle": "待机",
     "vision.paused": "游戏不在前台，暂停",
     "vision.scanning": "扫描中",
-    "warning.fullscreen": "游戏可能是全屏模式，无法识别。请在游戏内设置-窗口模式中选择无边框/窗口。"
+    "warning.fullscreen": "游戏可能是全屏模式，无法识别。请在游戏内设置-窗口模式中选择无边框/窗口。",
+    "warning.ocr_unavailable": "Windows OCR 没有 {language} 的识别包。请在 Windows 设置里安装该语言包；装好前不识别卡面和英雄名。"
   }
 }

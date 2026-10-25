@@ -76,9 +76,10 @@ if (Test-Path $stage) { Remove-Item -Recurse -Force $stage }
 New-Item -ItemType Directory -Path $stage | Out-Null
 Copy-Item -Recurse (Join-Path $dist '*') $stage
 Set-Content -LiteralPath (Join-Path $stage 'portable.txt') -Encoding utf8 -Value @'
-这是便携版：配置、日志和下载的数据都放在本目录的 userdata 文件夹里，不写系统目录。
-删除整个文件夹即可卸载。有新版本时助手会提示，请到 GitHub 下载新的便携版替换。
-https://github.com/czgreat/aramhex/releases
+This is the portable build: settings, logs and downloaded data stay in the userdata folder next to this file, never in system folders.
+Delete this whole folder to uninstall.
+There is no automatic update. When a new version is out, download the portable ZIP yourself and replace this folder with the new one.
+https://github.com/saon3r/aramhex/releases
 '@
 Copy-Item (Join-Path $root 'LICENSE') $stage
 $zip = "AramHex-Portable-$version.zip"

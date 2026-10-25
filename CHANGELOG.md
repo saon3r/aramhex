@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.4
+
+- Stats downloads stay inside the app's own data folder: a tampered download can no longer place files elsewhere.
+- Automatic screenshots now happen only in debug mode; an ordinary run saves none.
+- If Windows is missing the text-recognition language pack, the app now says so instead of quietly recognising nothing.
+- The portable build's note is English, links this repository and says updates are manual.
+- The privacy notes now describe what the app actually stores and sends.
+
 ## 1.1.3
 
 - The Windows installer is English throughout: the wizard, the Start Menu folder, both shortcut names, the uninstall entry, and the name shown in Apps & features. All of it was still Chinese, inherited from upstream.

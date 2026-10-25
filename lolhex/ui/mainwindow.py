@@ -483,8 +483,13 @@ class MainWindow(QMainWindow):
         self._ensure_completer()
         dd = snap.get("data", {})
         v = snap.get("vision", {})
-        warn = (f" · <span style=\"color:#d0533f\">{tr('warning.fullscreen')}</span>"
-                if v.get('blank') else '')
+        err = v.get("error") or {}
+        warnings = []
+        if err.get("code") == "ocr_unavailable":
+            warnings.append(tr("warning.ocr_unavailable", language=err.get("language") or "?"))
+        if v.get("blank"):
+            warnings.append(tr("warning.fullscreen"))
+        warn = "".join(f" · <span style=\"color:#d0533f\">{text}</span>" for text in warnings)
         self.status.setText(
             f"<b>{tr('main.status.label')}</b>{phase_label(snap.get('phase'))}<br>"
             f"<b>{tr('main.status.vision')}</b>{vision_label(v.get('status'))}{warn}<br>"

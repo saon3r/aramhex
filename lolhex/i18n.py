@@ -23,6 +23,9 @@ LANGS = [("zh_CN", "中文 简-繁（国服、台服）"), ("en_US", "English（
 # 1.1.1 起没有韩服选项：认韩文要单独的识别模型，模型下载已移除，选了也认不出。
 # 老设置文件里留着 ko_KR 的，按英文客户端处理（本工具的目标客户端），不要再当中文。
 RETIRED = {"ko_KR"}
+# 英国英语客户端识别上就是英语：本 fork 的目标客户端是 en_GB，老设置文件里也可能存着它。
+# 内部统一用 en_US（名字表、识别器按 en-US/en-GB 顺序找），不能落到「未知语言 → 中文」。
+ENGLISH_ALIASES = {"en_GB": "en_US"}
 LANG_CODES = {code for code, _ in LANGS}
 TW = "zh_TW"
 # 国服客户端选英雄界面上的字（i18n.json 里也有，这里写死，名字表缺失时国服照常能用）
@@ -32,6 +35,8 @@ UI_CN = {"bench": "可用", "pick": "选择你的英雄"}
 def normalize_lang(lang: str | None) -> str:
     if lang in RETIRED:
         return "en_US"
+    if lang in ENGLISH_ALIASES:
+        return ENGLISH_ALIASES[lang]
     return lang if lang in LANG_CODES else "zh_CN"
 
 

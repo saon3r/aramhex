@@ -78,6 +78,36 @@ def _sha256(path: Path) -> str:
     return h.hexdigest()
 
 
+# Windows 把这些名字（带不带扩展名都一样）当设备：「con.json」写的是控制台，不是文件。
+_WINDOWS_RESERVED = frozenset({"con", "prn", "aux", "nul", "conin$", "conout$"}
+                              | {f"com{i}" for i in range(1, 10)}
+                              | {f"lpt{i}" for i in range(1, 10)})
+# 反斜杠是 Windows 的路径分隔符；冒号是盘符和 NTFS 数据流；其余在 Windows 上不是合法文件名字符。
+_UNSAFE_NAME_CHARS = frozenset('\\:*?"<>|')
+
+
+def _safe_name(name) -> bool:
+    """清单/压缩包里的文件名是不是安全的相对 POSIX 路径：名.json 或 bands/<分段>/名.json。
+
+    压缩包（.pack.xz）本身就带着文件字节，逐个文件的 HTTP 地址策略根本不经手，
+    所以写盘之前只有这里能挡住：盘符路径（C:/x.json）、UNC、盘符相对路径（C:x）、
+    反斜杠、冒号（NTFS 数据流）、空段 / . / ..、Windows 保留设备名、
+    以点或空格结尾的段（Windows 会悄悄去掉，指向另一个名字）。
+    """
+    if not isinstance(name, str) or not name or not name.isascii() or name != name.strip():
+        return False
+    if any(ch in _UNSAFE_NAME_CHARS or ord(ch) < 0x20 or ord(ch) == 0x7F for ch in name):
+        return False
+    if not name.endswith(".json"):
+        return False
+    for part in name.split("/"):
+        if not part or part != part.strip() or part.endswith((".", " ")):
+            return False
+        if part.split(".")[0].lower() in _WINDOWS_RESERVED:
+            return False
+    return True
+
+
 def check_manifest(manifest: dict) -> dict:
     if not isinstance(manifest, dict) or manifest.get("schema_version") != SCHEMA_VERSION:
         raise DatasetError("数据清单版本不支持")
@@ -86,8 +116,8 @@ def check_manifest(manifest: dict) -> dict:
             or "hero_augments.json" not in files:
         raise DatasetError("数据清单缺文件")
     for name, f in files.items():
-        if ".." in name or name.startswith(("/", "\\")) or not name.endswith(".json"):
-            raise DatasetError(f"数据清单里有不合法的文件名：{name}")
+        if not _safe_name(name):
+            raise DatasetError(f"数据清单里有不合法的文件名：{name!r}")
         if not isinstance(f, dict) or len(str(f.get("sha256", ""))) != 64:
             raise DatasetError(f"数据清单里 {name} 没有 SHA-256")
     return manifest
@@ -220,13 +250,19 @@ def make_pack(folder: Path, manifest: dict) -> bytes:
 
 def unpack(blob: bytes) -> dict[str, bytes]:
     """官网镜像上的压缩包（xz）→ {文件名: 原文件字节}。hero_augments 在包里是 [海克斯ID, 局数, 胜场, 样本少]，
-    胜率按导出时的算法 round(胜场/局数, 6) 还原。"""
+    胜率按导出时的算法 round(胜场/局数, 6) 还原。包里的文件名同样要过 _safe_name：
+    包里的字节已经到手，逐个文件的地址策略不会替我们把关。"""
     import lzma
     pack = json.loads(lzma.decompress(blob))
-    if pack.get("format") != PACK_FORMAT:
+    if not isinstance(pack, dict) or pack.get("format") != PACK_FORMAT:
         raise DatasetError("压缩包格式不支持")
+    entries = pack.get("files")
+    if not isinstance(entries, dict):
+        raise DatasetError("压缩包里没有文件")
     out = {}
-    for name, obj in pack["files"].items():
+    for name, obj in entries.items():
+        if not _safe_name(name):
+            raise DatasetError(f"压缩包里有不合法的文件名：{name!r}")
         if name.endswith("hero_augments.json"):
             obj = {h: {str(a): {"games": g, "low_sample": bool(low), "win_rate": round(w / g, 6) if g else 0.0, "wins": w}
                        for a, g, w, low in rows} for h, rows in obj.items()}
@@ -245,6 +281,7 @@ def download(base_url: str, manifest: dict, dest: Path, timeout: float = 30, pro
     tmp = dest.with_name(dest.name + ".new")
     shutil.rmtree(tmp, ignore_errors=True)
     tmp.mkdir(parents=True)
+    tmp_root = tmp.resolve()
     total = sum(int(f.get("size") or 0) for f in manifest["files"].values())
     done = [0]
 
@@ -272,6 +309,8 @@ def download(base_url: str, manifest: dict, dest: Path, timeout: float = 30, pro
             if hashlib.sha256(body).hexdigest() != f["sha256"] or ("size" in f and len(body) != f["size"]):
                 raise DatasetError(f"{name} 校验不对（下载不完整或文件被改过）")
             out = tmp / name
+            if not out.resolve().is_relative_to(tmp_root):  # 名字已经校验过；写盘再核一次，绝不出临时目录
+                raise DatasetError(f"数据清单里的文件名写到目录外面：{name!r}")
             out.parent.mkdir(parents=True, exist_ok=True)
             out.write_bytes(body)
         (tmp / "latest.json").write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")

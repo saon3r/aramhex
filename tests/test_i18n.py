@@ -17,6 +17,8 @@ def test_names_by_language():
     # 韩服选项已移除：留着 ko_KR 的老设置文件按英文客户端处理，不再认韩文名字
     assert i18n.normalize_lang("ko_KR") == "en_US" and i18n.augment_names("ko_KR")["1305"] == "Leg Day"
     assert "ko_KR" not in i18n.LANG_CODES
+    # 英国英语（本 fork 的目标客户端）识别上就是英语，不能落到「未知语言 → 中文」
+    assert i18n.normalize_lang("en_GB") == "en_US" and i18n.augment_names("en_GB")["1305"] == "Leg Day"
     assert i18n.hero_names("ja_JP")["157"][0] == "ヤスオ"
     assert i18n.ui_text("bench", "zh_CN") == "可用"
     assert i18n.ui_text("bench", "en_US") == "Available Champions"
@@ -105,6 +107,8 @@ def test_old_traditional_setting_loads_as_chinese(tmp_path):
     assert Settings.load(p).game_lang == "zh_CN"
     p.write_text('{"game_lang": "xx", "install_id": "0123456789abcdef"}', encoding="utf-8")
     assert Settings.load(p).game_lang == "zh_CN"
+    p.write_text('{"game_lang": "en_GB", "install_id": "0123456789abcdef"}', encoding="utf-8")
+    assert Settings.load(p).game_lang == "en_US"
 
 
 def test_whole_screen_ocr_skips_one_char_lines(store, tmp_path, monkeypatch):
