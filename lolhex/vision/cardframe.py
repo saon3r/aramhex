@@ -70,24 +70,46 @@ def classify_card_frames(strip: np.ndarray, boxes: Sequence[Box | None], *,
     要求双侧稳定竖边一致，且标题区域存在亮色字形像素。卡内文字仍在淡入、
     缺少任一侧像素、背景干扰、棱彩未验证颜色均不猜。不能替代 OCR 稳定性判断。
     """
+    labels = card_presence(strip, boxes, strip_origin=strip_origin,
+                           window_height=window_height)
     geometry = _geometry(boxes, window_height)
-    result = [None, None, None]
-    if geometry is None or strip.ndim != 3 or strip.shape[2] < 3 or strip.dtype != np.uint8:
-        return result
-    centers, spacing, radius = geometry
+    if geometry is None:
+        return labels
     ox, oy = strip_origin
-    for i, (cx, box) in enumerate(zip(centers, boxes)):
+    for i, box in enumerate(boxes):
+        if labels[i] is None or box is None:
+            continue
         x0, y0, x1, y1 = box
         # 略过上侧留白，避免浮层标签被当成标题；仅做亮点存在性检查。
         ty = np.linspace(y0 + (y1-y0)*0.25, y0 + (y1-y0)*0.78, 10).astype(int) - oy
         tx = np.linspace(x0 + (x1-x0)*0.08, x1 - (x1-x0)*0.08, 96).astype(int) - ox
         if min(tx) < 0 or max(tx) >= strip.shape[1] or min(ty) < 0 or max(ty) >= strip.shape[0]:
+            labels[i] = None
             continue
         title = strip[ty[:, None], tx[None, :], :3]
         lit = title.min(axis=2) >= 170
         if lit.sum() < 8 or np.count_nonzero(lit.any(axis=1)) < 3:
-            continue
-        ys = np.linspace(y0 + (y1-y0)*0.25, y1-1, 12).astype(int) - oy
+            labels[i] = None
+    return labels
+
+
+def card_presence(strip: np.ndarray, boxes: Sequence[Box | None], *,
+                  strip_origin: tuple[int, int], window_height: int) -> list[str | None]:
+    """保守的三卡面板证据：每列双侧一致的金属竖边 + 卡内暗底。
+
+    不需要标题文字或亮度，所以标题淡入、被抹掉或位置偏移时仍然有效；它只证明
+    “这个位置有一张卡的边框和暗色卡身”，不证明是哪张海克斯。棱彩和无法确定的
+    颜色返回 None（未知即不猜），普通场景里的灰/金色物体也可能满足部分条件，
+    因此调用方还要求三列同时成立，并把结果与零识别持续时间一起判断。
+    """
+    ox, oy = strip_origin
+    result = [None, None, None]
+    geometry = _geometry(boxes, window_height)
+    if geometry is None or strip.ndim != 3 or strip.shape[2] < 3 or strip.dtype != np.uint8:
+        return result
+    centers, spacing, radius = geometry
+    for i, (cx, box) in enumerate(zip(centers, boxes)):
+        ys = np.linspace(box[1] + (box[3]-box[1])*0.25, box[3]-1, 12).astype(int) - oy
         if min(ys) < 0 or max(ys) >= strip.shape[0]:
             continue
         sides = []

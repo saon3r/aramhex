@@ -471,6 +471,15 @@ def client_badge(rect) -> tuple[int, int, int]:
             round(CLIENT_BADGE_SIZE * s))
 
 
+def cards_unrecognised_notice(vision: dict) -> str | None:
+    """当前仍持续的「三张卡在、却没有认出一个标题」提示；恢复后返回 None。
+
+    事件本身（本局是否提示过）由 engine 的锁存字段单独记录，所以这里只表示当前状态，
+    不会把一次提示变成常驻的“坏了”标记。
+    """
+    return tr("warning.cards_unrecognised") if (vision or {}).get("cards_unrecognised") else None
+
+
 class ControlPanel(QWidget):
     """右上角的小按钮 + 可展开详情。选英雄阶段跟随客户端窗口，进游戏后跟随游戏窗口。
 
@@ -841,6 +850,9 @@ class ControlPanel(QWidget):
                          f"{i18n.ocr_unavailable_notice(error.get('language'))}</span>")
         if vision.get("blank"):
             parts.append(f"<span style='color:#ff7a6b'>{tr('warning.fullscreen')}</span>")
+        cards_line = cards_unrecognised_notice(vision)
+        if cards_line:
+            parts.append(f"<span style='color:#ff7a6b'>{cards_line}</span>")
         parts.append(f"<span style='color:#8b93a7'>{data_status_html(snap.get('data', {}))}</span>")
         parts.append(f"<a href='rescan' style='color:#62a8ff'>{tr('common.rescan')}</a>&nbsp;&nbsp;"
                      f"<a href='quit' style='color:#ff7a6b'>{tr('overlay.link.quit')}</a>")
@@ -859,9 +871,21 @@ class Overlay:
         self.panel = ControlPanel(engine, engine.settings.overlay_corner)
         self.panel.show()
         self.autoshot = AutoShot(engine)  # 设置里开了自动截图时，三选一和选英雄时自动截整屏
+        self._cards_notice_key = None  # 已提示过的三卡零识别事件 id
         self.timer = QTimer()
         self.timer.timeout.connect(self._tick)
         self.timer.start(250)
+
+    def _notify_vision_warnings(self, snap: dict) -> None:
+        """三卡零识别的托盘提示：每个事件 id 只提示一次，下一局的新事件重新提示。"""
+        event = ((snap.get("vision") or {}).get("cards_unrecognised_event") or {})
+        key = event.get("id")
+        if key == getattr(self, "_cards_notice_key", None):
+            return
+        self._cards_notice_key = key
+        notify = getattr(self, "notify", None)
+        if key is not None and notify:
+            notify(tr("warning.cards_unrecognised"))
 
     def set_visible(self, on: bool):
         self.visible = on
@@ -883,6 +907,7 @@ class Overlay:
             notify = getattr(self, "notify", None)
             if key and key[0] == "ocr_unavailable" and notify:
                 notify(i18n.ocr_unavailable_notice(key[1]))
+        self._notify_vision_warnings(snap)  # 三卡零识别：每局一次，恢复不影响事件锁存
         if not getattr(self, "visible", True):
             return
         if snap.get("vision", {}).get("blank") and not getattr(self, "_blank_warned", False):

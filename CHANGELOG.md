@@ -1,5 +1,15 @@
 # Changelog
 
+## 1.1.5
+
+- Augment badges now hide when another program is in the foreground (for example after Alt-Tab) and come back as soon as the game is focused again. Clicking the assistant's own panel does not hide them.
+- Small samples are now labelled as reference only, including the case where all three cards on screen have fewer than 1000 games. Scores, win-rate ranks and the recommended pick are unchanged.
+- Summoner spells now include every combination with at least 3% pick rate and 1000 games, sorted by win rate, up to three. When none qualifies, the most-played combination is still shown.
+- If the three cards are clearly on screen but nothing can be recognised for a sustained period, the app now says so: one notification and one log line per game. It stays quiet for a single missed read, a short fade, one recognised card, a missing language pack or a game in the background, and it takes no extra screenshots.
+- Card recognition retries a transient miss instead of dropping the offer, and a saved card layout that is malformed, outside the screen or overlapping is now rejected instead of being used.
+- Bundled stats refreshed: patch 16.21, sample up to 26 October 2026, 5.38 million valid matches.
+- No change to the recognition pipeline's resolution handling, no renderer rewrite, no new network hosts and no telemetry of any kind.
+
 ## 1.1.4
 
 - Stats downloads stay inside the app's own data folder: a tampered download can no longer place files elsewhere.

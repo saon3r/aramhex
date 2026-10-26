@@ -20,6 +20,9 @@ def test_run_starts(tmp_path, monkeypatch):
     monkeypatch.setattr(Engine, "start", lambda self: None)
     s = Settings.load(tmp_path / "config.json")
     s.check_data_updates = False
+    # 欢迎框是 1.2 秒后的 QTimer.singleShot：留到别的测试里 pump Qt 事件会弹模态框卡住，
+    # 本测试只验证 run() 能启动/退出，不测欢迎框。
+    s.seen_welcome = True
     assert overlay.run(lambda: Engine(s), minimized=True) == 0
 
 
@@ -70,8 +73,10 @@ def test_blank_capture_warns_once():
     from types import SimpleNamespace
     from lolhex.ui import overlay
     said = []
-    ov = SimpleNamespace(visible=True, notify=said.append,
+    ov = SimpleNamespace(visible=True, notify=said.append, _cards_notice_key=None,
                          engine=SimpleNamespace(snapshot=lambda: {"vision": {"blank": True}}))
+    # 绑定真实的三卡零识别 helper；替身只补窗口/面板缺失的部分，不复制产品逻辑。
+    ov._notify_vision_warnings = lambda snap: overlay.Overlay._notify_vision_warnings(ov, snap)
     for _ in range(3):
         try:
             overlay.Overlay._tick(ov)

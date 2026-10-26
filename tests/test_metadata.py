@@ -206,15 +206,20 @@ def test_parse_augments_selects_by_active_id_not_aram_or_kiwi_heuristic():
     assert "999999" in metadata.parse_augments(payload)
 
 
-def test_parse_augments_covers_all_232_bundled_active_ids():
+def test_parse_augments_covers_every_bundled_active_id():
+    # 只让内置数据里真正活跃的海克斯通过：显示名表里还有已退役的 ID，所以从全表喂进去，
+    # 出来的 ID 集合必须和数据集的活跃集合完全一致（多一个少一个都算错），不写死数量。
+    assert BUNDLED_AUGMENTS, "内置数据里没有活跃海克斯"
     payload = [{"id": int(aid), "nameTRA": I18N["augments"][aid]["en_US"],
                 "rarity": "kSilver", "augmentSmallIconPath": "ASSETS/UX/Cherry/Augments/Icons/X.png"}
-               for aid in BUNDLED_AUGMENTS]
+               for aid in I18N["augments"]]
     payload.append({"id": 999999, "nameTRA": "Not Bundled", "rarity": "kGold"})
 
     out = metadata.parse_augments(payload, set(BUNDLED_AUGMENTS))
 
-    assert set(out) == set(BUNDLED_AUGMENTS) and len(out) == 232
+    assert set(out) == set(BUNDLED_AUGMENTS)
+    assert "999999" not in out
+    assert set(BUNDLED_AUGMENTS) <= set(I18N["augments"])  # 每个活跃 ID 都有英文/中文显示名
     for aid in BUNDLED_AUGMENTS:
         assert out[aid]["name"] == I18N["augments"][aid]["zh_CN"]
         assert out[aid]["name_en"] == I18N["augments"][aid]["en_US"]
@@ -255,8 +260,8 @@ def test_parse_augments_unknown_english_falls_back_without_internal_names():
 
 # ---------- 英文显示名 ----------
 
-def test_all_232_bundled_augments_have_english_display_names():
-    assert len(BUNDLED_AUGMENTS) == 232
+def test_all_bundled_augments_have_english_display_names():
+    assert BUNDLED_AUGMENTS, "内置数据里没有活跃海克斯"
     for aid, meta in BUNDLED_AUGMENTS.items():
         expected = I18N["augments"][aid]["en_US"]
         name = metadata.display_augment_name(aid)

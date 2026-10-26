@@ -176,6 +176,9 @@ class AugmentDetector:
         self._pending: list[dict | None] = [None] * 3
         self._low_match_reads = 0  # 已稳定后，有限次数的真实低识别批次；指纹缓存空值不算。
         self._observation = 0
+        # 最近一次真实读数（缓存命中沿用上次的像素结论）：matched 是原始识别到的标题数，
+        # 与能不能发布 Offer 无关；engine 用它判断「一个标题都没认出来」。
+        self.last_read: dict = {"matched": 0, "fresh": False, "source": None, "observation": 0}
         # 这局花在认字上的次数和时间（秒），对局结束写进日志，玩家说卡的时候看
         # *_cpu 是本线程实际算了多久（单线程推理在调用线程上跑）；比 *_s（墙钟）小很多说明线程在排队等 CPU
         self.cost = {"strip": 0, "strip_s": 0.0, "strip_cpu": 0.0, "strip_ocr": 0,
@@ -272,6 +275,9 @@ class AugmentDetector:
                 bx = tuple(int(v / scale) for v in ln.box)
                 hits.append((TextLine(ln.text, ln.score, (bx[0] + x0, bx[1] + y0, bx[2] + x0, bx[3] + y0)), aid, sc))
         group = self._pick_row(hits, H)
+        # 原始识别计数先记下：即使几何被拒/不足两张，也说明标题文字是认出来的。
+        self.last_read = {"matched": len({aid for _, aid, _ in group if aid}),
+                          "fresh": True, "source": "full", "observation": self._observation}
         if len(group) < 2:
             return None
         # 同一个海克斯在两处命中不算两张卡（1.1.1 日志里出现过 ['死亡之舞', '', '死亡之舞']）。
@@ -459,6 +465,8 @@ class AugmentDetector:
         if any(fresh):
             self._observation += 1
         offer = Offer(slots, texts, scores, boxes, padded=True, source="strip", observation=self._observation)
+        self.last_read = {"matched": offer.matched(), "fresh": any(fresh),
+                          "source": "strip", "observation": self._observation}
         if self.calibration.guess and offer.matched() == 3:
             self.calibration.guess = False  # 默认位置在本机对上了，存下来
             self._save_calibration()
@@ -511,6 +519,50 @@ class AugmentDetector:
                   offer.observation, offer.slots, accepted, [p is not None for p in self._pending])
         self._stable = stable
         return stable
+
+    def card_evidence(self, image: np.ndarray, win: Rect, *, full: bool = False,
+                      origin: tuple[int, int] | None = None) -> dict:
+        """已有像素的保守三卡面板证据；不认字、不截图、不增加捕获或 OCR。
+
+        strip 模式用标题条截图（origin 为它相对客户区的偏移；省略时按尺寸认回）；
+        full 模式自己从整帧里截三张标题需要的那一条。几何未知或像素不符时 cards=0，
+        调用方必须把 0 当“不确定”，不能当“没有卡”。matched 是最近一次真实读数。
+        """
+        from .cardframe import card_presence, frame_strip_bounds
+        w, h = int(win.width), int(win.height)
+        cal = self.calibration if self.calibrated_for(w, h) else Calibration.default(w, h)
+        pb = cal.pixel_boxes(w, h)
+        result = {"cards": 0, "labels": [None, None, None],
+                  "frame": "full" if full else "strip", "width": w, "height": h,
+                  "matched": int(self.last_read.get("matched") or 0)}
+        if image is None or getattr(image, "ndim", 0) != 3 or image.shape[2] < 3:
+            return result
+        bounds = frame_strip_bounds(pb, h)
+        if bounds is None:
+            return result
+        if full:
+            x0, y0 = max(0, bounds[0]), max(0, bounds[1])
+            x1, y1 = min(image.shape[1], bounds[2]), min(image.shape[0], bounds[3])
+            if x1 <= x0 or y1 <= y0:
+                return result
+            strip, oxy = image[y0:y1, x0:x1], (x0, y0)
+        else:
+            strip = image
+            if origin is None:
+                # 标题条是 strip_rect 截出来的：按宽高认回它相对客户区的偏移。
+                tight = (min(b[0] for b in pb), min(b[1] for b in pb),
+                         max(b[2] for b in pb), max(b[3] for b in pb))
+                match = next((b for b in (bounds, tight)
+                              if (image.shape[1], image.shape[0]) == (b[2]-b[0], b[3]-b[1])), None)
+                if match is None:
+                    return result
+                oxy = (match[0], match[1])
+            else:
+                oxy = origin
+        labels = card_presence(strip, pb, strip_origin=oxy, window_height=h)
+        result["labels"] = list(labels)
+        result["cards"] = sum(1 for label in labels if label)
+        return result
 
     def column_of(self, x: int, y: int, win: Rect) -> int | None:
         """屏幕坐标 (x, y) 落在哪张卡的竖列上；用于记录玩家点了哪张。"""

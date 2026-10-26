@@ -296,7 +296,9 @@ def test_polluted_schema2_cache_is_healed_on_restart_without_http(tmp_path, no_n
     assert set(disk["augments"]) == allowed      # 落盘愈合，重启后不会复活
     assert again.augments["1001"]["name"] and again.augments["1001"]["rarity"]
     meta = json.loads((bundled / "meta.json").read_text(encoding="utf-8"))
-    prov = set(meta["provisional_augments"])
+    # 过渡数据才有这两个键：这份内置数据里没有（所有海克斯都已有正式服统计），但换回带过渡
+    # 数据的数据集时同一段断言还得成立，所以按可选键读。
+    prov = set(meta.get("provisional_augments") or {})
     assert prov <= set(again.augments) and all(again.augments[a]["new"] for a in prov)
     assert "1332" in again.augments and "2128" in again.augments
 

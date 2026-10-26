@@ -77,8 +77,10 @@ or crawling the client. The dataset here is 5.1M real Mayhem games from seven CN
 the live patch. Champion strength differs by region; augment strength travels better.
 Everything in the app is labelled accordingly.
 
-**The augment screen's layout is measured against the current UI.** If Riot restyles it, the
-badges stop appearing. There is an open issue to make that failure visible instead of silent.
+**The augment screen's layout is measured against the current UI.** Sustained recognition
+failure now produces one warning per game when the app can independently detect all three
+card panels. This check is conservative: unknown frame colours or a major Riot redesign
+can still evade it and require an update.
 
 **It needs an English client.** Windows' OCR needs an English recogniser pack (`en-US` or
 `en-GB`); the app warns you in the main window, the overlay and a tray notification if it is

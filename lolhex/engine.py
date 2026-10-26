@@ -21,6 +21,7 @@ from . import i18n, recommend
 from .config import Settings, app_home
 from .data.public import PublicStore
 from .data.store import DataStore
+from .messages import tr
 from .panel import hero_panel
 from .vision import window as win
 from .vision.matcher import NameMatcher, normalize
@@ -73,6 +74,54 @@ def rank_grade(rank, total) -> str | None:
     return next(g for lim, g in GRADES if q <= lim)
 
 
+class CardFailureTracker:
+    """「三张卡在、但一个标题都没认出来」的纯计数器：不读像素、不认字。
+
+    每次 observe 代表一次真实捕获的观察。要同时满足 ≥3 次观察和 ≥1.5 秒，
+    中间任何一次识别到标题或证据不足都会清零重来；每局最多触发一次（fired），
+    离开对局/下一局用 new_game 重新武装。后台、暂停、缺识别器用 reset 丢弃候选，
+    但已发出的托盘事件保持锁存（它记录事实，不是常驻状态）。
+    """
+
+    MIN_OBSERVATIONS = 3
+    MIN_SECONDS = 1.5
+    MAX_OBSERVATIONS = 1000  # 报数上界：持续失败也停在这个数，计数器不无界增长
+
+    def __init__(self) -> None:
+        self.fired = False
+        self.observations = 0
+        self.since: float | None = None
+
+    def new_game(self) -> None:
+        self.fired = False
+        self.reset()
+
+    def reset(self) -> None:
+        self.observations = 0
+        self.since = None
+
+    def unfire(self) -> None:
+        """相位已经结束，这次触发没发布出去：不占用本局唯一的一次提示。"""
+        self.fired = False
+
+    def observe(self, now: float, *, cards: int, matched: int) -> dict:
+        if cards < 3 or matched > 0:
+            self.reset()
+            return {"active": False, "fired": False, "observations": 0, "elapsed": 0.0}
+        if self.since is None:
+            self.since = now
+        self.observations = min(self.observations + 1, self.MAX_OBSERVATIONS)
+        elapsed = max(0.0, now - self.since)
+        # 浮点累加的 1.5 秒会变成 1.4999999999999998：容差远小于一次扫描间隔。
+        active = (self.observations >= self.MIN_OBSERVATIONS
+                  and elapsed >= self.MIN_SECONDS - 1e-6)
+        fired = active and not self.fired
+        if fired:
+            self.fired = True
+        return {"active": active, "fired": fired,
+                "observations": self.observations, "elapsed": elapsed}
+
+
 class Engine:
     def __init__(self, settings: Settings, home: Path | None = None, store: DataStore | None = None,
                  transport=None):
@@ -94,6 +143,7 @@ class Engine:
             self.store.hold = lambda: self.state["phase"] == "ingame"
         self._rescan = threading.Event()
         self._vision_error: str | None = None  # 上一次识别异常（同一原因只记一次堆栈）
+        self._evidence_error: str | None = None  # 上一次卡面证据异常（同一原因只记一次堆栈）
         self._observer_error: str | None = None  # 上一次观察异常（同一原因只记一次堆栈）
         self._ocr_warned: tuple[str, str] | None = None  # 已警告过的「识别器缺失」条件
         self._detector = None  # 延迟创建，避免没进游戏就加载 OCR 模型
@@ -107,12 +157,17 @@ class Engine:
         self._last_eval_log = None  # 同一个三选一只记一次评估结果
         self._evaluation_revision = 0
         self._panel_cache: tuple[str | None, dict | None] = (None, None)
+        self._card_failure = CardFailureTracker()  # 三卡在、零识别的持续观察；每局一次提示
+        self._cards_event_seq = 0                  # 提示事件编号：托盘按 id 去重/重新武装
+        self._last_vision_rect: tuple[int, int] | None = None  # 分辨率变了要重新计数
         self.state: dict = {
             "phase": None,  # None / client / ingame
             "hero_id": None, "hero_source": None, "hero_candidates": [],
             "game_window": False, "client_window": False,
             "vision": {"status": "idle", "calibrated": False, "last_scan": None, "blank": False,
-                       "error": None},  # {"code": "ocr_unavailable", "language": "zh_CN"}；界面照这个提示
+                       "error": None,  # {"code": "ocr_unavailable", "language": "zh_CN"}；界面照这个提示
+                       "cards_unrecognised": None,        # 当前仍持续的「有卡没认出来」；恢复即清
+                       "cards_unrecognised_event": None},  # 本局已发出的提示事件（锁存，不是常驻状态）
             "offer": None, "evaluation": None,
             "champ_select": None,  # {"bench": [...], "team": [...]}，每项带胜率和排名
         }
@@ -528,10 +583,94 @@ class Engine:
         self._clear_selection()
         if self._detector is not None:
             self._detector.clear_tracking()
+        # 新的一局重新武装提示；上一局的托盘事件与当前提示都不该再显示。
+        self._card_failure.new_game()
+        self._last_vision_rect = None
+        with self._lock:
+            self.state["vision"]["cards_unrecognised"] = None
+            self.state["vision"]["cards_unrecognised_event"] = None
         log.info("对局结束")
         self._data_wake.set()
 
     # ---------- 海克斯识别 ----------
+
+    def _suppress_cards_notice(self) -> None:
+        """后台/暂停/缺识别器/窗口几何变化：丢掉候选并撤掉当前提示。
+
+        本局已经发出的托盘事件保持锁存——它记录一次事实，不是「仍然坏了」的常驻状态。
+        """
+        self._card_failure.reset()
+        with self._lock:
+            if self.state["vision"].get("cards_unrecognised"):
+                self.state["vision"]["cards_unrecognised"] = None
+
+    def _on_card_evidence(self, evidence: dict, rect, now: float) -> None:
+        """一次真实捕获的面板证据 → 当前提示与每局一次的托盘事件；不认字、不截图。"""
+        size = (rect.width, rect.height)
+        if self._last_vision_rect is not None and self._last_vision_rect != size:
+            self._card_failure.reset()   # 分辨率/窗口几何变了：旧观察不再连续
+        self._last_vision_rect = size
+        matched = max(0, int(evidence.get("matched") or 0))
+        cards = max(0, int(evidence.get("cards") or 0))
+        status = self._card_failure.observe(now, cards=cards, matched=matched)
+        notice = None
+        if status["active"]:
+            notice = {"observations": status["observations"],
+                      "elapsed": round(status["elapsed"], 2),
+                      "cards": cards, "matched": matched,
+                      "frame": evidence.get("frame") or "strip",
+                      "width": size[0], "height": size[1]}
+        event = None
+        with self._lock:
+            if self.state["phase"] != "ingame":
+                # 扫描途中已退出对局：丢弃这次候选，不能发布过期提示。
+                if status["fired"]:
+                    self._card_failure.unfire()
+                self._card_failure.reset()
+                self.state["vision"]["cards_unrecognised"] = None
+                return
+            self.state["vision"]["cards_unrecognised"] = notice
+            if status["fired"]:
+                self._cards_event_seq += 1
+                event = {"id": self._cards_event_seq, **notice}
+                self.state["vision"]["cards_unrecognised_event"] = event
+        if event is not None:
+            # 目录里的同一句提示 + 有界结构化上下文；不记 OCR 原文、不截图。
+            log.warning("%s observations=%d elapsed=%.1fs cards=%d matched=%d frame=%s geometry=%dx%d",
+                        tr("warning.cards_unrecognised"), event["observations"], event["elapsed"],
+                        event["cards"], event["matched"], event["frame"],
+                        event["width"], event["height"])
+
+    def _publish_card_evidence(self, det, image, rect, hwnd, now: float, *,
+                               full: bool, origin: tuple[int, int] | None) -> None:
+        """扫描完成后的面板证据：先重查前台/几何，再算像素，最后才允许提示。
+
+        证据只是诊断：任何异常都按“未知”处理并撤掉候选，绝不影响已经识别成功的
+        offer 发布，也不吞掉真正的 OCR 异常（那些发生在识别 try 里）。
+        """
+        try:
+            fresh = win.client_rect(hwnd)
+        except Exception:
+            fresh = None
+        # Alt-Tab / 移动 / 改分辨率发生在慢扫描途中：旧证据作废，不能在后台提示一次。
+        if fresh != rect:
+            self._suppress_cards_notice()
+            return
+        if not win.is_foreground(hwnd):
+            self._suppress_cards_notice()
+            return
+        try:
+            evidence = det.card_evidence(image, rect, full=full, origin=origin)
+        except Exception as e:  # 证据自身的故障：只记一次，按未知处理
+            self._suppress_cards_notice()
+            if repr(e) != self._evidence_error:
+                self._evidence_error = repr(e)
+                log.exception("卡面证据异常")
+            return
+        try:
+            self._on_card_evidence(evidence, rect, now)
+        except Exception:  # 提示逻辑坏掉不能拖垮识别线程
+            log.exception("卡面证据处理异常")
 
     def _vision_loop(self) -> None:
         from .vision import capture
@@ -553,6 +692,7 @@ class Engine:
                     visible = False
                 if self._detector is not None:
                     self._log_vision_cost(self._detector)
+                self._suppress_cards_notice()
                 self.state["vision"]["status"] = "idle"
                 self._rescan.wait(1.0)
                 self._rescan.clear()
@@ -560,6 +700,7 @@ class Engine:
             hwnd = win.find_game_window()
             rect = win.client_rect(hwnd)
             if not rect or not win.is_foreground(hwnd):
+                self._suppress_cards_notice()
                 self.state["vision"]["status"] = "paused"
                 self._stop.wait(0.5)
                 continue
@@ -575,11 +716,17 @@ class Engine:
             forced = self._rescan.is_set()
             self._rescan.clear()
             offer, ran = None, False
+            evidence_image, evidence_full, evidence_origin = None, False, None
             try:
                 if det.calibrated_for(rect.width, rect.height) and not forced:
                     if now - last_strip >= self.settings.scan_interval_ms / 1000 * self.settings.speed_factor:
                         last_strip = now
-                        offer = det.check_strip(capture.grab(det.strip_rect(rect)), rect)
+                        sr = det.strip_rect(rect)
+                        strip = capture.grab(sr)
+                        offer = det.check_strip(strip, rect)
+                        # 面板证据稍后用这张已有截图算（失败不影响 offer）。
+                        evidence_image, evidence_full = strip, False
+                        evidence_origin = (sr.left - rect.left, sr.top - rect.top)
                         ran = True
                         # 一直识别不到：整块扫描一次，防止卡片位置变了；
                         # 还在用默认位置时照常按 bootstrap 间隔扫，本机校准过就 30 秒一次
@@ -587,17 +734,22 @@ class Engine:
                         every = 30 if confirmed else self.settings.bootstrap_interval_s * self.settings.speed_factor
                         if offer is None and not visible and now - last_full > every:
                             last_full = now
-                            offer = det.scan_full(capture.grab(rect), (rect.left, rect.top))
+                            frame = capture.grab(rect)
+                            offer = det.scan_full(frame, (rect.left, rect.top))
+                            evidence_image, evidence_full, evidence_origin = frame, True, None
                 elif forced or now - last_full >= self.settings.bootstrap_interval_s * self.settings.speed_factor:
                     last_full = now
                     frame = capture.grab(rect)
                     blank = capture.is_blank(frame)
                     self.state["vision"]["blank"] = blank
                     offer = None if blank else det.scan_full(frame, (rect.left, rect.top))
+                    if not blank:
+                        evidence_image, evidence_full, evidence_origin = frame, True, None
                     ran = True
             except Exception as e:
                 # 缺识别包：状态给界面，同一语言只警告一次（这是预期情况，不打堆栈）
                 # 后端持续坏掉时别每 300ms 刷一次堆栈：同一原因每局只记一次完整的
+                self._suppress_cards_notice()
                 if self._note_ocr_unavailable(e):
                     log.debug("识别跳过：识别器不可用")
                 elif repr(e) != self._vision_error:
@@ -608,6 +760,9 @@ class Engine:
             else:
                 if ran:
                     self._clear_ocr_error()  # 能正常扫就说明识别器可用
+                if evidence_image is not None:
+                    self._publish_card_evidence(det, evidence_image, rect, hwnd, now,
+                                                full=evidence_full, origin=evidence_origin)
             self.state["vision"].update(status="scanning", calibrated=det.confirmed_for(rect.width, rect.height))
             if ran:
                 self.state["vision"]["last_scan"] = time.time()
