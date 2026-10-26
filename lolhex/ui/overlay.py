@@ -206,6 +206,9 @@ class BadgeLayer(_Layer):
                 label = tr("augment.note.nodata")
             if r.get("thin") == "too_few":
                 label = tr("overlay.badge.too_few")
+            if r["verdict"] == "best" and r.get("sample_warning"):
+                # 三张（或首选那张）都不到 1000 局：不写「首选」，改成相对较好、仅供参考
+                label = tr("sample.best_reference")
             lines = []
             if r.get("score") is not None:
                 s = f"{r['score']:+.1f}"
@@ -224,7 +227,7 @@ class BadgeLayer(_Layer):
                 meta.append(tr(key, rarity=rarity, rank=r["rank"], total=r.get("rank_total") or "?"))
             if r.get("basis") == "pbe" and r.get("pbe_games"):  # 新海克斯先用测试服数据：直接给局数和胜率，看得出高低
                 meta.append(tr("overlay.badge.pbe", games=r["pbe_games"], win=_pct(r["pbe_win"])))
-            if r.get("thin") == "few":
+            if r.get("thin") == "few" or (r.get("sample_warning") and r.get("thin") != "too_few"):
                 meta.insert(0, tr("sample.few"))
             if meta:
                 lines.append(" · ".join(meta))
@@ -889,7 +892,9 @@ class Overlay:
                 notify(tr("warning.fullscreen"))
         game = win.find_game_window()
         grect = win.client_rect(game) if game else None
-        self.badges.update_from(snap, grect, game)
+        # 游戏不在前台（Alt-Tab 到别的程序）时隐藏标签，免得盖在别的窗口上；点自己的浮窗不算离开
+        # （window.is_foreground 认 companion），切回游戏马上恢复，识别状态不丢。
+        self.badges.update_from(snap, grect if grect and win.is_foreground(game) else None, game)
         client = None if grect else win.find_client_window()
         crect = win.client_rect(client) if client else None
         # 标注层置顶：客户端不在前台（切到别的窗口）时隐藏，免得盖在别的程序上

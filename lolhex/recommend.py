@@ -11,7 +11,8 @@
 3. 样本分档：<250 局仅参考、250–999 中等、≥1000 充足，显示在界面上。
 4. 首选只在样本充足（≥1000 局）的海克斯里挑：冷门海克斯偶尔胜率高，多半是局数少碰巧打出来的。
    比同屏其他海克斯少一个数量级以上（<1/10）的，标"样本太少"并提示刷新，不管胜率多高；
-   只是不足 1000 局的，不当首选、标"样本偏少"。三张都不足时才正常比较。
+   只是不足 1000 局的，不当首选、标"样本偏少"。三张都不足时仍正常比较，但明确标仅供参考：
+   每张都带 sample_warning（分数、名次、首选不变），建议里写明三张（或首选那张）样本偏少。
 选取率只展示，不进分数：常拿不代表强。
 选了分段时（Gitea #7，10-21）：「这个海克斯比英雄平均高多少」按分段局数把分段和全体综合，
 Δ = w·Δ分段 + (1−w)·Δ全体，w = 分段局数 / (分段局数 + K)，K 由数据自己估（public._band_shrink）。
@@ -344,6 +345,12 @@ def evaluate(store, hero_id: str | None, slots: list[str | None], k: int = 300) 
         elif most >= RELIABLE_GAMES and g < RELIABLE_GAMES:
             r["thin"] = "few"
             r["reasons"].append(tr("reason.few_games", games=g))
+        if g < RELIABLE_GAMES:
+            # 可信度提示独立于同屏比较：三张都不足 1000 局也不能一声不吭。局数用全体（选了分段时的
+            # games_all），分数、首选池和分段综合都仍按原规则；「样本太少」已有更重的提醒，只加一句。
+            r["sample_warning"] = True
+            if not r.get("thin"):
+                r["reasons"].append(tr("reason.sample_reference"))
 
     pool = [r for r in scored if not r.get("thin")] or scored
     best = max(pool, key=lambda r: r["score"]) if pool else None
@@ -362,6 +369,11 @@ def evaluate(store, hero_id: str | None, slots: list[str | None], k: int = 300) 
 
     if best is None:
         advice = tr("advice.none")
+    elif len(slots) == 3 and len(scored) == 3 and all(r.get("sample_warning") for r in scored):
+        # 三张都不到 1000 局：结论仍是最高分那张，但明确说只是仅供参考，不写成「首选」
+        advice = tr("advice.sample_all", name=best.get("name"))
+    elif best.get("sample_warning"):
+        advice = tr("advice.sample_best", name=best.get("name"))
     elif len(scored) == len(slots) and all(r["score"] < REROLL_BELOW for r in scored):
         advice = tr("advice.all_bad", name=best.get("name"))
     else:

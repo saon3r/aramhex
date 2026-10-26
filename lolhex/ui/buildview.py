@@ -46,7 +46,7 @@ def lines(d: dict, icons, show_win: bool, size: int = 24, compact: bool = False)
     """统计口径的几行：召唤师技能（有数据时）、常出装备。compact=浮窗（图标小一号、行更紧凑）。"""
     wr = (lambda x: f" <span style='color:{GRAY}'>{_pct(x)}</span>") if show_win else (lambda x: "")
     out = []
-    sums = d.get("summoners") or []  # panel.sort_summoners 已经筛好（出场 ≥10%、按胜率、最多两组）
+    sums = d.get("summoners") or []  # panel.sort_summoners 已经筛好（出场 ≥3% 且 ≥1000 局、按胜率、最多三组）
     if sums and d.get("summoner_source"):
         date = d.get("summoner_source_date") or tr("build.date_unknown")
         out.append("<span style='color:" + GRAY + "'>"

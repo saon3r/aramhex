@@ -564,6 +564,8 @@ class MainWindow(QMainWindow):
                                   + (f"<br><span style='color:#c9a0ff'>{escape(pk)}</span>" if pk else ""))
         for lab, r in zip(self.offer_cards, ev["slots"]):
             v, col = verdict_label(r.get("verdict"))
+            if r.get("verdict") == "best" and r.get("sample_warning"):
+                v = tr("sample.best_reference")
             lines = [f"<b style='color:{col}'>{v}</b>",
                      f"<b>{escape(augment_name(r.get('augment_id')))}</b>"]
             meta = [rarity_label(r.get("rarity"))]
@@ -582,8 +584,8 @@ class MainWindow(QMainWindow):
                 s = f"{r['score']:+.1f}"
                 if show_win and recommend.win_text(r):
                     s += " · " + recommend.win_text(r)
-                if r.get("thin"):
-                    warn = tr("sample.too_few_warn") if r["thin"] == "too_few" else tr("sample.few")
+                if r.get("thin") or r.get("sample_warning"):
+                    warn = tr("sample.too_few_warn") if r.get("thin") == "too_few" else tr("sample.few")
                     s += f" · <span style='color:#ff7a6b'>{warn}</span>"
                 lines.append(s)
             lab.setText("<br>".join(lines))
