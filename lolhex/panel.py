@@ -7,14 +7,16 @@ from . import recommend
 from .messages import tr
 
 
-# 召唤师技能组合：只放出场率 ≥10% 的，按胜率排，最多两组（用户 10-22 定）。
-# 一组都不够 10% 时（极少见）放出场最多的那一组。
-SUMMONER_MIN_PICK = 0.10
-SUMMONER_SHOW = 2
+# 召唤师技能组合：出场 ≥3% 且至少 1000 局的都放，按胜率排，最多三组（v1.1.5：
+# 以前是 ≥10%、最多两组，26 个英雄因此藏掉了胜率更高的一组）。一组都不够格时（极少见）放出场最多的那一组。
+SUMMONER_MIN_PICK = 0.03
+SUMMONER_MIN_GAMES = 1000
+SUMMONER_SHOW = 3
 
 
 def sort_summoners(rows: list[dict]) -> list[dict]:
-    enough = sorted((r for r in rows if r["pick"] >= SUMMONER_MIN_PICK), key=lambda r: -r["win"])
+    enough = sorted((r for r in rows if r["pick"] >= SUMMONER_MIN_PICK
+                     and (r.get("games") or 0) >= SUMMONER_MIN_GAMES), key=lambda r: -r["win"])
     return enough[:SUMMONER_SHOW] or sorted(rows, key=lambda r: -r["games"])[:1]
 
 

@@ -73,12 +73,15 @@ telemetry of any kind.
 
 **The statistics are the Chinese server's.** Riot blocks ARAM: Mayhem in their public API,
 so nobody has EUW data — every site showing "Mayhem stats" is either borrowing Arena numbers
-or crawling the client. The dataset here is 5.1M real Mayhem games from seven CN regions on
-the live patch. Champion strength differs by region; augment strength travels better.
-Everything in the app is labelled accordingly.
+or crawling the client. This build bundles 5,376,732 real Mayhem games (about 5.38M) from
+seven CN regions, collected on patch 16.21; the app refreshes them from the stats feed when
+it can but does not promise to always be on the newest patch. Champion strength differs by
+region; augment strength travels better. Everything in the app is labelled accordingly.
 
-**The augment screen's layout is measured against the current UI.** If Riot restyles it, the
-badges stop appearing. There is an open issue to make that failure visible instead of silent.
+**The augment screen's layout is measured against the current UI.** Sustained recognition
+failure now produces one warning per game when the app can independently detect all three
+card panels. This check is conservative: unknown frame colours or a major Riot redesign
+can still evade it and require an update.
 
 **It needs an English client.** Windows' OCR needs an English recogniser pack (`en-US` or
 `en-GB`); the app warns you in the main window, the overlay and a tray notification if it is

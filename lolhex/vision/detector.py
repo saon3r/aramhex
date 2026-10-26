@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import json
 import logging
+import math
 import time
 from dataclasses import dataclass, field, replace
 from pathlib import Path
@@ -53,6 +54,42 @@ class Calibration:
 
     def pixel_boxes(self, w: int, h: int) -> list[tuple[int, int, int, int]]:
         return [(int(a * w), int(b * h), int(c * w), int(d * h)) for a, b, c, d in self.boxes]
+
+    def valid(self) -> bool:
+        """标题区域必须有限、在客户区内、从左到右且互不重叠；不要求固定间距。
+
+        载入存档、整块扫描的候选定位、写盘前都走这里。故意把类型检查写得很宽：
+        calibration.json 是玩家机器上的文件，坏字段只能被判无效，不能抛异常
+        （上游 1.1.1 记错过一次 339 px 重叠的 4K 校准，就是没查几何）。
+        """
+        try:
+            if not isinstance(self.size, (tuple, list)) or len(self.size) != 2:
+                return False
+            if not all(isinstance(v, (int, float)) and not isinstance(v, bool)
+                       and math.isfinite(v) and v > 0 for v in self.size):
+                return False
+            if not isinstance(self.boxes, (tuple, list)) or len(self.boxes) != 3:
+                return False
+            width, height = int(self.size[0]), int(self.size[1])
+            prev_right = None
+            for box in self.boxes:
+                if not isinstance(box, (tuple, list)) or len(box) != 4:
+                    return False
+                if not all(isinstance(v, (int, float)) and not isinstance(v, bool)
+                           and math.isfinite(v) for v in box):
+                    return False
+                a, b, c, d = (float(v) for v in box)
+                if not (0 <= a < c <= 1 and 0 <= b < d <= 1):
+                    return False
+                # 比例上非空不代表像素上非空：窄窗口里一个极窄的框会截出 0 像素。
+                if int(c * width) <= int(a * width) or int(d * height) <= int(b * height):
+                    return False
+                if prev_right is not None and prev_right > a:
+                    return False
+                prev_right = c
+            return True
+        except (TypeError, ValueError, OverflowError):
+            return False
 
 
 @dataclass
@@ -137,7 +174,11 @@ class AugmentDetector:
         self._cells: list[dict | None] = [None] * 3
         self._stable: Offer | None = None
         self._pending: list[dict | None] = [None] * 3
+        self._low_match_reads = 0  # 已稳定后，有限次数的真实低识别批次；指纹缓存空值不算。
         self._observation = 0
+        # 最近一次真实读数（缓存命中沿用上次的像素结论）：matched 是原始识别到的标题数，
+        # 与能不能发布 Offer 无关；engine 用它判断「一个标题都没认出来」。
+        self.last_read: dict = {"matched": 0, "fresh": False, "source": None, "observation": 0}
         # 这局花在认字上的次数和时间（秒），对局结束写进日志，玩家说卡的时候看
         # *_cpu 是本线程实际算了多久（单线程推理在调用线程上跑）；比 *_s（墙钟）小很多说明线程在排队等 CPU
         self.cost = {"strip": 0, "strip_s": 0.0, "strip_cpu": 0.0, "strip_ocr": 0,
@@ -145,8 +186,13 @@ class AugmentDetector:
         if calib_path and calib_path.exists():
             try:
                 d = json.loads(calib_path.read_text(encoding="utf-8"))
-                self.calibration = Calibration([tuple(b) for b in d["boxes"]], tuple(d["size"]))
-            except (OSError, ValueError, KeyError):
+                calibration = Calibration([tuple(b) for b in d["boxes"]], tuple(d["size"]))
+                if calibration.valid():
+                    self.calibration = calibration
+                else:
+                    # 文件留着供诊断；先用默认位置，等一次有效的整块扫描再替换。
+                    log.warning("忽略无效三选一校准：标题区域越界、重叠或顺序错误")
+            except (OSError, ValueError, KeyError, TypeError):
                 self.calibration = None
 
     @property
@@ -161,11 +207,13 @@ class AugmentDetector:
         self._cells = [None]*3
         self._stable = None
         self._pending = [None]*3
+        self._low_match_reads = 0
 
     def set_matcher(self, matcher: NameMatcher) -> None:
         self.matcher = matcher
         self._last_fp = None
         self._cells = [None] * 3
+        self._low_match_reads = 0
 
     def calibrated_for(self, w: int, h: int) -> bool:
         return self.calibration is not None and tuple(self.calibration.size) == (w, h)
@@ -181,6 +229,7 @@ class AugmentDetector:
             self._cells = [None] * 3
             self._stable = None
             self._pending = [None] * 3
+            self._low_match_reads = 0
 
     def reset_calibration(self) -> None:
         self.calibration = None
@@ -188,11 +237,13 @@ class AugmentDetector:
         self._cells = [None] * 3
         self._stable = None
         self._pending = [None] * 3
+        self._low_match_reads = 0
         if self.calib_path and self.calib_path.exists():
             self.calib_path.unlink()
 
     def _save_calibration(self) -> None:
-        if self.calib_path and self.calibration:
+        # 写盘前再查一次：任何路径都不该把坏几何留在玩家机器上。
+        if self.calib_path and self.calibration and self.calibration.valid():
             self.calib_path.write_text(json.dumps({"boxes": self.calibration.boxes,
                                                    "size": self.calibration.size}), encoding="utf-8")
 
@@ -224,13 +275,29 @@ class AugmentDetector:
                 bx = tuple(int(v / scale) for v in ln.box)
                 hits.append((TextLine(ln.text, ln.score, (bx[0] + x0, bx[1] + y0, bx[2] + x0, bx[3] + y0)), aid, sc))
         group = self._pick_row(hits, H)
+        # 原始识别计数先记下：即使几何被拒/不足两张，也说明标题文字是认出来的。
+        self.last_read = {"matched": len({aid for _, aid, _ in group if aid}),
+                          "fresh": True, "source": "full", "observation": self._observation}
         if len(group) < 2:
+            return None
+        # 同一个海克斯在两处命中不算两张卡（1.1.1 日志里出现过 ['死亡之舞', '', '死亡之舞']）。
+        if len({aid for _, aid, _ in group if aid}) < 2:
+            now = time.monotonic()
+            if now - getattr(self, "_duplicate_rejected_at", float("-inf")) >= 60:
+                self._duplicate_rejected_at = now
+                log.info("拒绝整块识别：匹配列=%d，但不足两个不同海克斯名", len(group))
             return None
         group.sort(key=lambda t: t[0].cx)
         slots, texts, scores, boxes = self._assign_columns(group, W)
         if len(group) == 3:
-            self._calibrate(group, W, H)
+            if not self._calibrate(group, W, H):
+                return None  # 不发布错误位置，也不污染已确认的校准。
             boxes = self.calibration.pixel_boxes(W, H)
+        else:
+            # 整块扫描已经看到卡片，旧条带的空缓存不能遮住这次恢复。
+            self._last_fp = self._last_result = self._last_window = None
+            self._cells = [None] * 3
+        self._low_match_reads = 0
         ox, oy = origin
         sboxes = [None if b is None else (b[0] + ox, b[1] + oy, b[2] + ox, b[3] + oy) for b in boxes]
         self._observation += 1
@@ -248,10 +315,11 @@ class AugmentDetector:
         for ln, _, _ in hits:
             row = [t for t in hits if abs(t[0].cy - ln.cy) < 0.03 * H]
             # 同一张卡上可能匹配到多行（标题 + 描述里提到别的海克斯名），按横向距离去重。
+            # 同名（同一 aid）在两处命中时只留分数最高的一条：它不该挤掉真正的中卡。
             row.sort(key=lambda t: -t[2])
             uniq: list = []
             for t in row:
-                if all(abs(t[0].cx - u[0].cx) > 0.08 * H for u in uniq):
+                if all(abs(t[0].cx - u[0].cx) > 0.08 * H and t[1] != u[1] for u in uniq):
                     uniq.append(t)
             if len(uniq) > len(best):
                 best = uniq
@@ -280,7 +348,8 @@ class AugmentDetector:
             slots[i], texts[i], scores[i], boxes[i] = aid, ln.text, sc, ln.box
         return slots, texts, scores, boxes
 
-    def _calibrate(self, group, W, H) -> None:
+    @staticmethod
+    def _calibration_candidate(group, W, H) -> Calibration:
         centers = [t[0].cx for t in group]
         spacing = (centers[2] - centers[0]) / 2
         th = int(np.median([t[0].h for t in group]))
@@ -288,12 +357,26 @@ class AugmentDetector:
         half_w = 0.42 * spacing
         half_h = 0.9 * th
         boxes = [((c - half_w) / W, (cy - half_h) / H, (c + half_w) / W, (cy + half_h) / H) for c in centers]
-        self.calibration = Calibration(boxes, (W, H))
+        return Calibration(boxes, (W, H))
+
+    def _calibrate(self, group, W, H) -> bool:
+        candidate = self._calibration_candidate(group, W, H)
+        if not candidate.valid():
+            # 拒绝时不改 self.calibration、不写盘：旧的有效校准继续用。
+            now = time.monotonic()
+            if now - getattr(self, "_geometry_rejected_at", float("-inf")) >= 60:
+                self._geometry_rejected_at = now
+                log.warning("拒绝三选一校准：标题区域越界、重叠或顺序错误 boxes=%s @ %dx%d",
+                            candidate.boxes, W, H)
+            return False
+        self.calibration = candidate
         # 定位框变更后不能用旧条带的近似指纹命中旧坐标。
         self._last_fp = self._last_result = self._last_window = None
         self._cells = [None] * 3
+        self._low_match_reads = 0
         self._save_calibration()
-        log.info("已校准三选一标题位置：%s @ %dx%d", boxes, W, H)
+        log.info("已校准三选一标题位置：%s @ %dx%d", candidate.boxes, W, H)
+        return True
 
     # ---------- 2. 已校准的轻量检查 ----------
 
@@ -314,19 +397,23 @@ class AugmentDetector:
 
     RECHECK_SECONDS = 5.0
     PENDING_SECONDS = 0.9
+    LOW_MATCH_READS = 3  # 已稳定后，最多容忍三个真实低识别批次；之后才算卡片消失。
 
     def check_strip(self, strip: np.ndarray, win: Rect) -> Offer | None:
-        """strip 为 strip_rect 截图。画面没变化时直接复用上次结果。"""
+        """strip 为 strip_rect 截图。画面没变化时直接复用上次结果（确认失败期间除外）。"""
         fp = fingerprint(strip)
         now = time.monotonic()
         active = self._last_result is not None
+        confirming = self._stable is not None and 0 < self._low_match_reads < self.LOW_MATCH_READS
         due = any(c is None for c in self._cells) or (active and any(
             now-c["at"] >= self.RECHECK_SECONDS for c in self._cells))
-        if self._last_window == win and not fp_changed(self._last_fp, fp) and not due and not any(self._pending):
+        if (self._last_window == win and not fp_changed(self._last_fp, fp) and not due
+                and not any(self._pending) and not confirming):
             log.debug("海克斯OCR source=cache observation=%d", self._observation)
             return replace(self._last_result, source="cache") if self._last_result else None
         if self._last_window != win:
             self._cells = [None] * 3
+            self._low_match_reads = 0
         self._last_fp = fp
         self._last_window = win
         t0, c0 = time.perf_counter(), time.thread_time()
@@ -348,12 +435,15 @@ class AugmentDetector:
         slots: list[str | None] = []
         texts, scores, boxes, fresh = [], [], [], []
         now = time.monotonic()
+        confirming = self._stable is not None and 0 < self._low_match_reads < self.LOW_MATCH_READS
         for i, (x0, y0, x1, y1) in enumerate(pb):
             crop = strip[y0 - sy:y1 - sy, x0 - sx:x1 - sx]
             fp = fingerprint(crop)
             old = self._cells[i]
+            # 确认期间绕开像素缓存，只重读上一批没认出来的列；其余列沿用读数。
             read = (old is None or fp_changed(old["fp"], fp) or self._pending[i] is not None
-                    or (self._last_result is not None and now-old["at"] >= self.RECHECK_SECONDS))
+                    or (self._last_result is not None and now-old["at"] >= self.RECHECK_SECONDS)
+                    or (confirming and old is not None and old["aid"] is None))
             if read:
                 scale = REC_HEIGHT / max(1, crop.shape[0])
                 txt, conf = self.ocr.recognize(_resize(crop, scale))
@@ -375,13 +465,30 @@ class AugmentDetector:
         if any(fresh):
             self._observation += 1
         offer = Offer(slots, texts, scores, boxes, padded=True, source="strip", observation=self._observation)
+        self.last_read = {"matched": offer.matched(), "fresh": any(fresh),
+                          "source": "strip", "observation": self._observation}
         if self.calibration.guess and offer.matched() == 3:
             self.calibration.guess = False  # 默认位置在本机对上了，存下来
             self._save_calibration()
-        self._last_result = self._stabilize(offer, fresh) if offer.matched() >= 2 else None
-        if self._last_result is None:
-            self._stable = None
-            self._pending = [None] * 3
+        if offer.matched() >= 2:
+            if self._low_match_reads:
+                log.info("三选一跟踪恢复：低命中新观察=%d 本轮重读=%s", self._low_match_reads, fresh)
+            self._low_match_reads = 0
+            self._last_result = self._stabilize(offer, fresh)
+        else:
+            self._last_result = None
+            for i, read in enumerate(fresh):
+                if read:
+                    self._pending[i] = None  # 本轮不可靠读数中断此前的“连续新观察”。
+            # 暂不发布旧卡，只保留内部连续状态供短暂失败恢复。引擎仍按 3 次 None 关闭。
+            # 确认期间绕过空缓存，仅重读失败列，三次 None 来自三个真实 OCR 批次。
+            if self._stable is not None and any(fresh):
+                self._low_match_reads += 1
+                log.info("三选一跟踪待确认：低命中新观察=%d/%d 本轮重读=%s 命中=%d",
+                         self._low_match_reads, self.LOW_MATCH_READS, fresh, offer.matched())
+            if self._stable is None or self._low_match_reads >= self.LOW_MATCH_READS:
+                self._stable = None
+                self._pending = [None] * 3
         return self._last_result
 
     def _stabilize(self, offer: Offer, fresh: list[bool]) -> Offer:
@@ -412,6 +519,50 @@ class AugmentDetector:
                   offer.observation, offer.slots, accepted, [p is not None for p in self._pending])
         self._stable = stable
         return stable
+
+    def card_evidence(self, image: np.ndarray, win: Rect, *, full: bool = False,
+                      origin: tuple[int, int] | None = None) -> dict:
+        """已有像素的保守三卡面板证据；不认字、不截图、不增加捕获或 OCR。
+
+        strip 模式用标题条截图（origin 为它相对客户区的偏移；省略时按尺寸认回）；
+        full 模式自己从整帧里截三张标题需要的那一条。几何未知或像素不符时 cards=0，
+        调用方必须把 0 当“不确定”，不能当“没有卡”。matched 是最近一次真实读数。
+        """
+        from .cardframe import card_presence, frame_strip_bounds
+        w, h = int(win.width), int(win.height)
+        cal = self.calibration if self.calibrated_for(w, h) else Calibration.default(w, h)
+        pb = cal.pixel_boxes(w, h)
+        result = {"cards": 0, "labels": [None, None, None],
+                  "frame": "full" if full else "strip", "width": w, "height": h,
+                  "matched": int(self.last_read.get("matched") or 0)}
+        if image is None or getattr(image, "ndim", 0) != 3 or image.shape[2] < 3:
+            return result
+        bounds = frame_strip_bounds(pb, h)
+        if bounds is None:
+            return result
+        if full:
+            x0, y0 = max(0, bounds[0]), max(0, bounds[1])
+            x1, y1 = min(image.shape[1], bounds[2]), min(image.shape[0], bounds[3])
+            if x1 <= x0 or y1 <= y0:
+                return result
+            strip, oxy = image[y0:y1, x0:x1], (x0, y0)
+        else:
+            strip = image
+            if origin is None:
+                # 标题条是 strip_rect 截出来的：按宽高认回它相对客户区的偏移。
+                tight = (min(b[0] for b in pb), min(b[1] for b in pb),
+                         max(b[2] for b in pb), max(b[3] for b in pb))
+                match = next((b for b in (bounds, tight)
+                              if (image.shape[1], image.shape[0]) == (b[2]-b[0], b[3]-b[1])), None)
+                if match is None:
+                    return result
+                oxy = (match[0], match[1])
+            else:
+                oxy = origin
+        labels = card_presence(strip, pb, strip_origin=oxy, window_height=h)
+        result["labels"] = list(labels)
+        result["cards"] = sum(1 for label in labels if label)
+        return result
 
     def column_of(self, x: int, y: int, win: Rect) -> int | None:
         """屏幕坐标 (x, y) 落在哪张卡的竖列上；用于记录玩家点了哪张。"""

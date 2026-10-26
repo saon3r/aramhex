@@ -206,6 +206,9 @@ class BadgeLayer(_Layer):
                 label = tr("augment.note.nodata")
             if r.get("thin") == "too_few":
                 label = tr("overlay.badge.too_few")
+            if r["verdict"] == "best" and r.get("sample_warning"):
+                # 三张（或首选那张）都不到 1000 局：不写「首选」，改成相对较好、仅供参考
+                label = tr("sample.best_reference")
             lines = []
             if r.get("score") is not None:
                 s = f"{r['score']:+.1f}"
@@ -224,7 +227,7 @@ class BadgeLayer(_Layer):
                 meta.append(tr(key, rarity=rarity, rank=r["rank"], total=r.get("rank_total") or "?"))
             if r.get("basis") == "pbe" and r.get("pbe_games"):  # 新海克斯先用测试服数据：直接给局数和胜率，看得出高低
                 meta.append(tr("overlay.badge.pbe", games=r["pbe_games"], win=_pct(r["pbe_win"])))
-            if r.get("thin") == "few":
+            if r.get("thin") == "few" or (r.get("sample_warning") and r.get("thin") != "too_few"):
                 meta.insert(0, tr("sample.few"))
             if meta:
                 lines.append(" · ".join(meta))
@@ -466,6 +469,15 @@ def client_badge(rect) -> tuple[int, int, int]:
     s = rect.height / 720
     return (round(rect.right - CLIENT_BADGE_RIGHT * s), round(rect.top + CLIENT_BADGE_TOP * s),
             round(CLIENT_BADGE_SIZE * s))
+
+
+def cards_unrecognised_notice(vision: dict) -> str | None:
+    """当前仍持续的「三张卡在、却没有认出一个标题」提示；恢复后返回 None。
+
+    事件本身（本局是否提示过）由 engine 的锁存字段单独记录，所以这里只表示当前状态，
+    不会把一次提示变成常驻的“坏了”标记。
+    """
+    return tr("warning.cards_unrecognised") if (vision or {}).get("cards_unrecognised") else None
 
 
 class ControlPanel(QWidget):
@@ -838,6 +850,9 @@ class ControlPanel(QWidget):
                          f"{i18n.ocr_unavailable_notice(error.get('language'))}</span>")
         if vision.get("blank"):
             parts.append(f"<span style='color:#ff7a6b'>{tr('warning.fullscreen')}</span>")
+        cards_line = cards_unrecognised_notice(vision)
+        if cards_line:
+            parts.append(f"<span style='color:#ff7a6b'>{cards_line}</span>")
         parts.append(f"<span style='color:#8b93a7'>{data_status_html(snap.get('data', {}))}</span>")
         parts.append(f"<a href='rescan' style='color:#62a8ff'>{tr('common.rescan')}</a>&nbsp;&nbsp;"
                      f"<a href='quit' style='color:#ff7a6b'>{tr('overlay.link.quit')}</a>")
@@ -856,9 +871,21 @@ class Overlay:
         self.panel = ControlPanel(engine, engine.settings.overlay_corner)
         self.panel.show()
         self.autoshot = AutoShot(engine)  # 设置里开了自动截图时，三选一和选英雄时自动截整屏
+        self._cards_notice_key = None  # 已提示过的三卡零识别事件 id
         self.timer = QTimer()
         self.timer.timeout.connect(self._tick)
         self.timer.start(250)
+
+    def _notify_vision_warnings(self, snap: dict) -> None:
+        """三卡零识别的托盘提示：每个事件 id 只提示一次，下一局的新事件重新提示。"""
+        event = ((snap.get("vision") or {}).get("cards_unrecognised_event") or {})
+        key = event.get("id")
+        if key == getattr(self, "_cards_notice_key", None):
+            return
+        self._cards_notice_key = key
+        notify = getattr(self, "notify", None)
+        if key is not None and notify:
+            notify(tr("warning.cards_unrecognised"))
 
     def set_visible(self, on: bool):
         self.visible = on
@@ -880,6 +907,7 @@ class Overlay:
             notify = getattr(self, "notify", None)
             if key and key[0] == "ocr_unavailable" and notify:
                 notify(i18n.ocr_unavailable_notice(key[1]))
+        self._notify_vision_warnings(snap)  # 三卡零识别：每局一次，恢复不影响事件锁存
         if not getattr(self, "visible", True):
             return
         if snap.get("vision", {}).get("blank") and not getattr(self, "_blank_warned", False):
@@ -889,7 +917,9 @@ class Overlay:
                 notify(tr("warning.fullscreen"))
         game = win.find_game_window()
         grect = win.client_rect(game) if game else None
-        self.badges.update_from(snap, grect, game)
+        # 游戏不在前台（Alt-Tab 到别的程序）时隐藏标签，免得盖在别的窗口上；点自己的浮窗不算离开
+        # （window.is_foreground 认 companion），切回游戏马上恢复，识别状态不丢。
+        self.badges.update_from(snap, grect if grect and win.is_foreground(game) else None, game)
         client = None if grect else win.find_client_window()
         crect = win.client_rect(client) if client else None
         # 标注层置顶：客户端不在前台（切到别的窗口）时隐藏，免得盖在别的程序上

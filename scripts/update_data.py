@@ -49,6 +49,16 @@ def _bundled_snapshot():
         return None
 
 
+def _manifest_bytes(manifest: dict) -> bytes:
+    """清单固定写成 UTF-8 + LF。
+
+    bundled/** 在 .gitattributes 里是 -text（保住发布过的数据文件 SHA-256），所以这里绝不能用
+    write_text：Windows 上文本模式会把每个换行写成 CRLF，git diff --check 就把每一行都当成
+    行尾空白。数据文件本身仍按原字节写入，哈希不变。
+    """
+    return (json.dumps(manifest, ensure_ascii=False, indent=1, sort_keys=True) + "\n").encode("utf-8")
+
+
 def main(argv=None) -> int:
     ap = argparse.ArgumentParser(description="更新内置统计数据")
     ap.add_argument("--from", dest="src", type=Path, help="本地 aramhex-data 目录（不填则从 GitHub 下载）")
@@ -74,8 +84,7 @@ def main(argv=None) -> int:
                 raise SystemExit(f"{name} 的 SHA-256 和清单对不上")
             (tmp / name).parent.mkdir(parents=True, exist_ok=True)
             (tmp / name).write_bytes(body)
-        (tmp / "latest.json").write_text(json.dumps(manifest, ensure_ascii=False, indent=1, sort_keys=True) + "\n",
-                                         encoding="utf-8")
+        (tmp / "latest.json").write_bytes(_manifest_bytes(manifest))
         ds = Dataset(tmp, "bundled")
         shutil.rmtree(BUNDLED, ignore_errors=True)
         tmp.rename(BUNDLED)
