@@ -114,10 +114,9 @@ def test_context_change_resets_negative_confirmation(monkeypatch, reset):
 
 
 @pytest.mark.parametrize("recover", [True, False])
-def test_actual_engine_closes_only_after_new_negative_observations(monkeypatch, recover):
-    import threading
-    from types import SimpleNamespace
-
+def test_actual_engine_closes_only_after_new_negative_observations(monkeypatch, recover,
+                                                                  tmp_path, store, caplog):
+    from lolhex.config import Settings
     from lolhex.engine import Engine
     from lolhex.vision import capture, window
     det, ocr, clock, rect, strip = setup_detector(monkeypatch)
@@ -140,18 +139,19 @@ def test_actual_engine_closes_only_after_new_negative_observations(monkeypatch, 
     monkeypatch.setattr(window, "is_foreground", lambda _: True)
     monkeypatch.setattr(window, "lower_thread_priority", lambda: None)
     monkeypatch.setattr(capture, "grab", lambda *args: strip)
-    engine = Engine.__new__(Engine)
-    engine._lock = threading.RLock()
-    engine._stop = Stop()
-    engine._rescan = threading.Event()
+    # 用真实的 Engine（Settings + 临时目录 + 合成 store），只替换识别器/时钟/停止与发布回调，
+    # 这样新的卡面证据诊断路径是真正跑过的，而不是在 __new__ 半成品上抛异常被吞掉。
+    engine = Engine(Settings(), home=tmp_path, store=store)
+    engine._set(phase="ingame")
     engine._detector = det
-    engine.state = {"phase": "ingame", "vision": {}}
-    engine.settings = SimpleNamespace(scan_interval_ms=300, speed_factor=1,
-                                      bootstrap_interval_s=3)
-    engine._ocr_warned = None
+    engine._stop = Stop()
     engine._save_offer_shot = lambda _rect: None
     engine._on_offer = lambda offer: events.append(offer.slots if offer else None)
-    engine._vision_loop()
+    with caplog.at_level("DEBUG"):
+        engine._vision_loop()
     assert (None in events) is not recover
     assert ocr.calls == (7 if recover else 9)
     assert det.cost["full"] == 0
+    unexpected = [r for r in caplog.records
+                  if r.levelname in {"ERROR", "CRITICAL"} or "Traceback" in r.getMessage()]
+    assert not unexpected, [r.getMessage() for r in unexpected]
