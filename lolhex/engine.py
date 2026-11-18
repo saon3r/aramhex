@@ -19,6 +19,7 @@ from pathlib import Path
 
 from . import i18n, recommend
 from .config import Settings, app_home
+from .data.metadata import real_augment_name
 from .data.public import PublicStore
 from .data.store import DataStore
 from .messages import tr
@@ -32,8 +33,14 @@ log = logging.getLogger(__name__)
 def augment_matcher(store, settings) -> NameMatcher:
     """三选一认字用的名字表：中文用腾讯的名字，再加繁中（台服等）的名字；外服用那种语言的名字（ID 一样）。
     外服名字表里没有的（刚上线、名字表还没更新），退回中文名。"""
-    names: dict[str, str | list[str]] = {aid: a["name"] for aid, a in store.mayhem_augments().items()}
+    augs = store.mayhem_augments()
+    names: dict[str, str | list[str]] = {aid: a["name"] for aid, a in augs.items()}
     foreign = i18n.augment_names(settings.game_lang)
+    if foreign and i18n.normalize_lang(settings.game_lang) == "en_US":
+        # 内置名字表还没有的新海克斯：用 CommunityDragon 下载的英文名（占位名「Augment 1234」不算），
+        # 不然要等发新版才认得出（16.22 的 One Hit Wonder 就是这样）。
+        foreign = {**{aid: a["name_en"] for aid, a in augs.items() if real_augment_name(a.get("name_en"))},
+                   **foreign}
     if foreign:
         names = {aid: foreign.get(aid) or n for aid, n in names.items()}
         names.update({aid: n for aid, n in foreign.items() if aid not in names})
