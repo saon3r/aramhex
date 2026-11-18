@@ -173,6 +173,36 @@ def give_focus(hwnd: int) -> None:
         u.SetForegroundWindow(hwnd)
 
 
+def foreground_window() -> int:
+    """现在的前台窗口；不是 Windows 为 0。只读。"""
+    if not IS_WINDOWS:
+        return 0
+    return int(ctypes.windll.user32.GetForegroundWindow() or 0)
+
+
+def set_no_activate(hwnd: int, on: bool) -> bool:
+    """本进程自己的浮窗点了也不变成前台（WS_EX_NOACTIVATE，移植 upstream 1.1.9）：鼠标点击、悬停照常收到，
+    键盘一直归游戏。只改自己窗口的样式，不碰游戏窗口。返回是否改成功；不是 Windows、窗口没了返回 False。"""
+    if not IS_WINDOWS or not hwnd:
+        return False
+    try:
+        u = ctypes.windll.user32
+        if not u.IsWindow(hwnd):  # 窗口没了读出来是 0，会被当成「已清掉」
+            return False
+        get = getattr(u, "GetWindowLongPtrW", None) or u.GetWindowLongW
+        put = getattr(u, "SetWindowLongPtrW", None) or u.SetWindowLongW
+        get.restype = put.restype = ctypes.c_ssize_t
+        get.argtypes = (wintypes.HWND, ctypes.c_int)
+        put.argtypes = (wintypes.HWND, ctypes.c_int, ctypes.c_ssize_t)
+        old = get(hwnd, -20)  # GWL_EXSTYLE
+        new = old | 0x08000000 if on else old & ~0x08000000
+        if new != old:
+            put(hwnd, -20, new)
+        return bool(get(hwnd, -20) & 0x08000000) == on
+    except (OSError, AttributeError):
+        return False
+
+
 def left_button_clicked() -> bool:
     """自上次调用以来左键是否按下过（GetAsyncKeyState 低位），只读输入状态。"""
     if not IS_WINDOWS:

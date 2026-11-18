@@ -1418,6 +1418,12 @@
 "en_US": "No Mana, No Problem",
 "ja_JP": "マナなんていらない"
 },
+"3060": {
+"zh_CN": "单曲红人",
+"zh_TW": "一片歌手",
+"en_US": "One Hit Wonder",
+"ja_JP": "一発屋"
+},
 "3063": {
 "zh_CN": "溺水之赠礼",
 "zh_TW": "溺者贈禮",
@@ -1538,6 +1544,12 @@
 "en_US": "Upgrade Stormsurge",
 "ja_JP": "ストームサージ アップグレード"
 },
+"3159": {
+"zh_CN": "登峰造极境",
+"zh_TW": "崛起",
+"en_US": "RISE",
+"ja_JP": "昇れ"
+},
 "3163": {
 "zh_CN": "迷人蝴蝶",
 "zh_TW": "迷人蝶影",
@@ -1567,6 +1579,30 @@
 "zh_TW": "末日金屬",
 "en_US": "DOOM",
 "ja_JP": "ドゥーム"
+},
+"3262": {
+"zh_CN": "史莱姆时间",
+"zh_TW": "史萊姆時間",
+"en_US": "Slime Time",
+"ja_JP": "スライムタイム"
+},
+"3263": {
+"zh_CN": "超坚定风采",
+"zh_TW": "亦加堅定",
+"en_US": "Steadfaster Presence",
+"ja_JP": "ステッドファスター"
+},
+"3264": {
+"zh_CN": "秘术卫士",
+"zh_TW": "祕術衛士",
+"en_US": "Mystic Guard",
+"ja_JP": "ミスティックガード"
+},
+"3265": {
+"zh_CN": "坚不可破",
+"zh_TW": "全面強化",
+"en_US": "Fortified",
+"ja_JP": "要塞化"
 },
 "12317": {
 "zh_CN": "潘朵拉的盒子",

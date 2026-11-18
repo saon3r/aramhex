@@ -498,7 +498,8 @@ class ControlPanel(QWidget):
 
     def __init__(self, engine, corner: str = "top-right"):
         super().__init__()
-        # 面板需要能输入（搜英雄），所以不设 WindowDoesNotAcceptFocus
+        # 面板需要能输入（搜英雄），所以不设 WindowDoesNotAcceptFocus；
+        # 平时用 WS_EX_NOACTIVATE 不抢前台（_no_activate），只有点进搜索框才临时可激活
         self.setWindowFlags(Qt.FramelessWindowHint | Qt.WindowStaysOnTopHint | Qt.Tool)
         self.setAttribute(Qt.WA_TranslucentBackground)
         self.setAttribute(Qt.WA_ShowWithoutActivating)
@@ -506,6 +507,7 @@ class ControlPanel(QWidget):
         self.corner = corner
         self.expanded = False
         self.target_hwnd = 0      # 游戏窗口（进游戏后）或客户端窗口，点完浮窗把焦点还给它
+        self._typing_on = False   # 点进了搜索框、详情窗口真拿到了前台；选好、Esc、收起、玩家点回别处时结束
         self._away_since = None   # 展开后鼠标离开浮窗的时刻
         self._hovered = False     # 这次展开后鼠标是否进过浮窗
         self._auto_opened = False
@@ -550,6 +552,7 @@ class ControlPanel(QWidget):
         self._completer_ready = False
         self.search.returnPressed.connect(self._search_pick)
         self.search.installEventFilter(self)
+        self.body_win.installEventFilter(self)  # 打字中途详情失去前台
         self.confirm_hero = QPushButton(tr("common.confirm"))
         self.confirm_hero.clicked.connect(self._search_pick)
         search_row = QHBoxLayout()
@@ -575,10 +578,45 @@ class ControlPanel(QWidget):
 
     def showEvent(self, e):
         win.add_companion(int(self.winId()))  # 点浮窗不算离开客户端，标注照常显示
+        self._no_activate()
         super().showEvent(e)
         self._publish()
 
+    def _no_activate(self) -> None:
+        """移植 upstream 1.1.9：点图标、点详情都不抢前台，键盘一直归游戏（游戏丢一次前台再拿回来，
+        可能被 Windows 改成合成显示、锁帧）。只有点进搜索框打字时详情窗口才临时能当前台（_start_typing），
+        选好、Esc、收起、点回别处时改回。"""
+        win.set_no_activate(int(self.winId()), True)
+        win.set_no_activate(int(self.body_win.winId()), not self._typing_on)
+
+    def _panel_hwnds(self) -> set[int]:
+        """图标、详情和搜索框的补全列表。"""
+        out = {int(self.winId()), int(self.body_win.winId())}
+        c = self.search.completer()
+        if c is not None and c.popup().isVisible():
+            out.add(int(c.popup().winId()))
+        return out
+
+    def _sync_no_activate(self) -> None:
+        """每轮摆放、详情失去前台时：打字中途玩家点回游戏或别处，只把样式改回去，不抢前台。"""
+        if self._typing_on and win.foreground_window() not in self._panel_hwnds():
+            self._typing_on = False
+            log.debug("Overlay: foreground left while typing, body back to no-activate")
+        self._no_activate()
+
+    def _start_typing(self) -> None:
+        hb = int(self.body_win.winId())
+        self._typing_on = True
+        if win.set_no_activate(hb, False):
+            # 刚点了本进程的窗口，Windows 允许换前台；不看 isActiveWindow：点过之后 Qt 就当它是活动窗口了，其实前台还是游戏
+            win.give_focus(hb)
+        if win.foreground_window() != hb:
+            self._typing_on = False  # 没换成（Windows 拒绝）：改回去，免得之后点详情别处又抢前台
+            self._no_activate()
+        self.search.setFocus()
+
     def hideEvent(self, e):
+        self._typing_on = False
         self.body_win.hide()
         win.set_drawn("ControlPanel", [])
         super().hideEvent(e)
@@ -611,6 +649,8 @@ class ControlPanel(QWidget):
         if not self.expanded or not self.isVisible():
             if bw.isVisible():
                 bw.hide()
+                self._typing_on = False
+                self._no_activate()
                 self._publish()
             return
         bw.adjustSize()
@@ -625,6 +665,7 @@ class ControlPanel(QWidget):
                 win.set_window_rect(hb, target)  # 还没显示时先摆好再显示，不会在别处闪一下
             if not bw.isVisible():
                 win.add_companion(hb)  # 点详情不算离开客户端
+                self._no_activate()
                 bw.show()
                 if win.window_rect(hb) != target:  # Qt 显示时按它记的位置又挪了：摆回来
                     log.debug("Overlay body: position after show %s, expected %s",
@@ -647,10 +688,22 @@ class ControlPanel(QWidget):
         self.give_back_focus()
 
     def give_back_focus(self):
-        # 等这次点击处理完再还焦点，否则 Windows 会在点击结束时又把浮窗激活
-        QTimer.singleShot(0, lambda: win.give_focus(self.target_hwnd))
+        # 等这次点击处理完再还焦点，否则 Windows 会在点击结束时又把浮窗激活。
+        # 只在前台确实是浮窗（打字中，或系统没按不激活样式处理）时还；前台本来就在游戏、玩家切到了别的程序，什么也不做
+        self._typing_on = False
+        self._no_activate()
+        target = self.target_hwnd
+
+        def back():
+            if target and target == self.target_hwnd and win.foreground_window() in self._panel_hwnds():
+                win.give_focus(target)
+        QTimer.singleShot(0, back)
 
     def eventFilter(self, obj, ev):
+        if obj is self.body_win and ev.type() == QEvent.WindowDeactivate and self._typing_on:
+            QTimer.singleShot(0, self._sync_no_activate)  # 等 Windows 换完前台再看是不是点到别处了
+        if obj is self.search and ev.type() == QEvent.MouseButtonPress:
+            self._start_typing()  # 点进搜索框才让详情窗口当前台，不然字打不进来
         if obj is self.search and ev.type() == QEvent.KeyPress and ev.key() == Qt.Key_Escape:
             self.search.clear()
             self.give_back_focus()
@@ -658,7 +711,7 @@ class ControlPanel(QWidget):
         return super().eventFilter(obj, ev)
 
     def _typing(self) -> bool:
-        return self.search.hasFocus() and self.body_win.isActiveWindow()
+        return self._typing_on and self.search.hasFocus()
 
     def auto_hide(self, phase, in_champ_select: bool = True) -> None:
         """展开后鼠标离开一段时间就收起。选英雄阶段自动展开的不收（进了游戏才开始计时）。"""
@@ -726,6 +779,7 @@ class ControlPanel(QWidget):
     def place(self, rect, in_client: bool = False) -> None:
         """rect：游戏或客户端窗口（物理像素）。在客户端（大厅、选英雄）且浮窗在右上角时，
         图标放在头像右边「在线」那一行、铃铛左边，大小跟着客户端窗口走；进游戏后和以前一样贴在右上角。"""
+        self._sync_no_activate()
         badge = client_badge(rect) if in_client and rect is not None and self.corner == "top-right" else None
         k = self.devicePixelRatioF() or 1.0
         self._set_btn_size(max(20, round(badge[2] / k)) if badge else 40)

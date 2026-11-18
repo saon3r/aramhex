@@ -566,6 +566,7 @@ class PublicStore(DataStore):
     def refresh(self, force: bool = False) -> None:
         super().refresh(force)
         self.sync_data(force)
+        self.fill_augment_names()  # 刚换上的统计数据带来的新海克斯，这一轮就补英文名
 
     # ---------- 分段 ----------
 

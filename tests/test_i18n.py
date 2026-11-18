@@ -37,6 +37,25 @@ def test_augment_matcher_uses_game_language():
     assert retired.match("Leg Day")[0] == "1305"   # 老设置里的 ko_KR 按英文客户端处理
 
 
+def test_english_matcher_uses_downloaded_name_for_augments_missing_from_bundled_table(monkeypatch):
+    # 新海克斯（比如 16.22 的 One Hit Wonder）在内置名字表出来之前，英文客户端也要能认：
+    # 用 CommunityDragon 下载来的 name_en；占位名「Augment 9xxx」不算名字，不能拿来匹配。
+    monkeypatch.setattr(i18n, "augment_names", lambda lang: {"1305": "Leg Day"})
+    store = SimpleNamespace(mayhem_augments=lambda: {
+        "1305": {"name": "练腿日", "name_en": "Leg Day"},
+        "9060": {"name": "单曲红人", "name_en": "One Hit Wonder"},
+        "9061": {"name": "新卡", "name_en": "Augment 9061"},
+        "9062": {"name": "空名", "name_en": ""},
+    })
+    en = augment_matcher(store, SimpleNamespace(game_lang="en_US", match_threshold=72.0))
+    assert en.match("One Hit Wonder")[0] == "9060"
+    assert en.match("Leg Day")[0] == "1305"
+    assert en.match("Augment 9061")[0] is None
+    cn = augment_matcher(store, SimpleNamespace(game_lang="zh_CN", match_threshold=72.0))
+    assert cn.match("One Hit Wonder")[0] is None   # 中文模式不认英文名
+    assert cn.match("单曲红人")[0] == "9060"
+
+
 def test_matcher_several_names_and_short_english():
     m = NameMatcher({"1": ["Stats!", "属性！"], "2": "From Beginning To End"})
     assert m.match("Stats!")[0] == "1" and m.match("属性")[0] == "1"

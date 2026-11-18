@@ -31,6 +31,8 @@ STATIC_SCHEMA = 2
 # 需要联网刷新的家族；spells 是本地固定的英文小表，不参与过期判断。
 REFRESH_FAMILIES = ("versions", "heroes", "items", "augments")
 MAYHEM_MODES = ("KIWI",)
+# 有海克斯缺英文名时，最快多久再去 CommunityDragon 补一次（秒）
+NAMES_RETRY_S = 3600
 # 六张 Cherry 路径上的海克斯：即使统计/i18n 暂时缺，也留在 Mayhem 识别表里。
 CHERRY_AUGMENTS = frozenset({"1332", "1416", "2091", "2116", "2129", "2135"})
 _RARITIES = metadata.RARITIES
@@ -382,6 +384,8 @@ class DataStore:
         self._lock = threading.RLock()
         self.ranks: dict = {}
         self.last_error: str | None = None
+        self._names_asked: set[str] = set()   # 上次取 CommunityDragon 海克斯字典时识别表里的 ID
+        self._names_tried_at = 0.0
         blob = _read(self.root / "static.json")
         if _valid_static(blob):
             # 坏记录逐条丢掉；表和 schema 完整时继续用缓存，启动不等网络。
@@ -432,6 +436,46 @@ class DataStore:
             except Exception as e:  # 网络失败：继续用旧缓存
                 log.warning("刷新公开资料失败：%s", e)
                 self.last_error = f"公开资料：{e}"
+        self.fill_augment_names()
+
+    def _unnamed_augment_ids(self) -> set[str]:
+        augs = self.augments
+        return {aid for aid in self._active_augment_ids()
+                if not metadata.real_augment_name(_table(augs.get(aid)).get("name_en"))}
+
+    def fill_augment_names(self) -> None:
+        """识别表里有、还没英文名的海克斯（新统计数据刚带来的新卡）：只重取 CommunityDragon 海克斯字典，
+        不等 6 小时的资料周期——英文客户端认字靠这个名字。英文源也没有时一小时内不重复问。"""
+        missing = self._unnamed_augment_ids()
+        now = time.time()
+        # 上次取字典之后才出现的 ID 马上问；问过还没名字的，一小时后再问
+        if not missing or (missing <= self._names_asked and now - self._names_tried_at < NAMES_RETRY_S):
+            return
+        self._names_tried_at = now
+        log.info("%d 个海克斯还没有英文名，补取 CommunityDragon 海克斯字典：%s",
+                 len(missing), "、".join(sorted(missing)[:10]))
+        try:
+            parsed = self._fetch_augments()
+        except Exception as e:
+            log.info("补取海克斯英文名失败，一小时后再试：%s", e)
+            return
+        with self._lock:
+            families = dict(_table(self.static.get("families")))
+            families["augments"] = {**_table(families.get("augments")), "at": now}
+            self.static = {**self.static, "augments": _merge_augments(self.augments, parsed),
+                           "families": families}
+        self._persist()
+        left = self._unnamed_augment_ids()
+        if left:
+            log.info("英文源还没有这些海克斯的名字：%s", "、".join(sorted(left)[:10]))
+
+    def _fetch_augments(self) -> dict:
+        self._names_asked = set(self._active_augment_ids())  # 这次取字典问过的 ID
+        self._names_tried_at = time.time()
+        payload = http.get_json(metadata.CDRAGON_AUGMENTS, timeout=30, transport=self.transport)
+        return _usable_records(metadata.parse_augments(
+            payload, self._active_augment_ids(), modes=MAYHEM_MODES,
+            new_ids=self._new_augment_ids()), "海克斯")
 
     def _ddragon_version(self) -> str:
         versions = self.static.get("versions")
@@ -504,12 +548,7 @@ class DataStore:
             errors.append("版本：没有可用的 Data Dragon 版本")
 
         try:
-            payload = http.get_json(metadata.CDRAGON_AUGMENTS, timeout=30,
-                                    transport=self.transport)
-            parsed = _usable_records(metadata.parse_augments(
-                payload, self._active_augment_ids(), modes=MAYHEM_MODES,
-                new_ids=self._new_augment_ids()), "海克斯")
-            augments = _merge_augments(augments, parsed)
+            augments = _merge_augments(augments, self._fetch_augments())
             families["augments"] = {"at": now, "version": version or None}
             updated = True
         except Exception as e:

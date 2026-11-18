@@ -115,6 +115,14 @@ def augment_zh(augment_id: str | int) -> str:
     return _text(_row("augments", _display_key(augment_id)).get("zh_CN"))
 
 
+_PLACEHOLDER_EN = re.compile(r"Augment \d+")
+
+
+def real_augment_name(name) -> bool:
+    """英文海克斯名能不能拿来认字/算「有名字」：空的、parse_augments 的占位名「Augment 1234」不算。"""
+    return isinstance(name, str) and bool(name.strip()) and not _PLACEHOLDER_EN.fullmatch(name.strip())
+
+
 def augment_en(augment_id: str | int) -> str:
     return _english(_row("augments", _display_key(augment_id)).get("en_US"))
 

@@ -10,7 +10,7 @@
 },
 "communitydragon_augments": {
 "url": "https://raw.communitydragon.org/latest/plugins/rcp-be-lol-game-data/global/default/v1/cherry-augments.json",
-"sha256": "4f8967adfbf22933b0762396be2bd8483428062ee18f879f196e9100910ffc67"
+"sha256": "e009fa728cda41f2b27352b003892bfb90f2f9b0c35fbb90bb209bc1b4a34559"
 },
 "summoner_spells": "Riot public summoner spell IDs used by the stats dataset (1,4,6,7,13,14,21,32); names only, no Tencent assets"
 },
@@ -1600,6 +1600,9 @@
 "3059": {
 "rarity": "silver"
 },
+"3060": {
+"rarity": "gold"
+},
 "3063": {
 "rarity": "silver"
 },
@@ -1660,6 +1663,9 @@
 "3150": {
 "rarity": "gold"
 },
+"3159": {
+"rarity": "prismatic"
+},
 "3163": {
 "rarity": "gold"
 },
@@ -1674,6 +1680,18 @@
 },
 "3173": {
 "rarity": "gold"
+},
+"3262": {
+"rarity": "silver"
+},
+"3263": {
+"rarity": "gold"
+},
+"3264": {
+"rarity": "silver"
+},
+"3265": {
+"rarity": "silver"
 },
 "12317": {
 "rarity": "prismatic"
