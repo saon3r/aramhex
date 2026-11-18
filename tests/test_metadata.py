@@ -12,6 +12,7 @@ from pathlib import Path
 import pytest
 
 from lolhex.data import metadata
+from lolhex.data.store import CHERRY_AUGMENTS
 
 DATA = Path(metadata.__file__).parent
 I18N = json.loads((DATA / "i18n.json").read_text(encoding="utf-8"))
@@ -188,7 +189,10 @@ def test_parse_augments_can_pin_modes_and_new_flags_for_the_store():
 
 def test_parse_augments_selects_by_active_id_not_aram_or_kiwi_heuristic():
     active = set(BUNDLED_AUGMENTS)
-    cherry = ["1332", "1416", "2091", "2116", "2129", "2135"]
+    # 发版流程会先把内置统计刷新成最新一期再跑测试：哪几张 Cherry 卡还在统计里随版本变（16.22 没有 2091），
+    # 所以取「还在统计里」的那几张，不写死。
+    cherry = sorted(set(CHERRY_AUGMENTS) & active)
+    assert len(cherry) >= 3
     payload = [{"id": int(aid), "nameTRA": "ARAM_Augment_Internal",
                 "augmentNameId": "ARAM_Augment_Internal", "rarity": "kGold",
                 "augmentSmallIconPath": "ASSETS/UX/Cherry/Augments/Icons/Cherry.png"}
