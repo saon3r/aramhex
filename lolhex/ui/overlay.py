@@ -989,6 +989,13 @@ class Overlay:
                 log.debug("Overlay: neither game nor client window found, hiding")
             self.panel.hide()
             return
+        # 和标签一样：游戏/客户端不在前台（切到浏览器、聊天）时图标也隐藏，不浮在别的程序上；
+        # 用自己的浮窗（详情、搜英雄）不算离开（is_foreground 认 companion）。用户 11-18 要求。
+        if not win.is_foreground(game if grect else client):
+            if self.panel.isVisible():
+                log.debug("Overlay: League not in front, hiding icon")
+            self.panel.hide()
+            return
         if not self.panel.isVisible():
             log.debug("Overlay: showing (%s)", "game" if grect else "client")
             self.panel.show()
