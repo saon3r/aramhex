@@ -36,15 +36,27 @@ class FakeEngine:
 def panel(monkeypatch):
     app = QtWidgets.QApplication.instance() or QtWidgets.QApplication([])
     from lolhex.ui import overlay
-    focused, clock, cursor = [], [1000.0], [QPoint(-500, -500)]
-    monkeypatch.setattr(overlay.win, "give_focus", focused.append)
+    focused, clock, cursor, fg, styles = [], [1000.0], [QPoint(-500, -500)], [0], {}
+
+    def give_focus(hwnd):
+        focused.append(hwnd)
+        fg[0] = hwnd
+
+    def set_no_activate(hwnd, on):
+        styles[hwnd] = on
+        return True
+    monkeypatch.setattr(overlay.win, "give_focus", give_focus)
+    monkeypatch.setattr(overlay.win, "foreground_window", lambda: fg[0])
+    monkeypatch.setattr(overlay.win, "set_no_activate", set_no_activate)
     monkeypatch.setattr(overlay.win, "add_companion", lambda _h: None)
     monkeypatch.setattr(overlay.time, "monotonic", lambda: clock[0])
     monkeypatch.setattr(overlay.QCursor, "pos", staticmethod(lambda: cursor[0]))
     p = overlay.ControlPanel(FakeEngine())
     p.target_hwnd = 4242
     p.show()
-    yield SimpleNamespace(p=p, app=app, focused=focused, clock=clock, cursor=cursor, overlay=overlay)
+    fg[0] = int(p.winId())  # 旧做法（Windows 不尊重不激活样式时）：点了浮窗它就是前台
+    yield SimpleNamespace(p=p, app=app, focused=focused, clock=clock, cursor=cursor, overlay=overlay,
+                          fg=fg, styles=styles)
     p.close()
 
 
@@ -126,6 +138,7 @@ def test_search_pick_and_escape_give_focus_back(panel):
     p.btn.click()
     panel.app.processEvents()
     panel.focused.clear()
+    panel.fg[0] = int(p.body_win.winId())  # 正在打字
     p.search.setText("提莫")
     p._search_pick()
     panel.app.processEvents()
@@ -133,9 +146,104 @@ def test_search_pick_and_escape_give_focus_back(panel):
     from PySide6.QtCore import QEvent, Qt
     from PySide6.QtGui import QKeyEvent
     p.search.setText("abc")
+    panel.fg[0] = int(p.body_win.winId())  # 正在打字
     QtWidgets.QApplication.sendEvent(p.search, QKeyEvent(QEvent.KeyPress, Qt.Key_Escape, Qt.NoModifier))
     panel.app.processEvents()
     assert p.search.text() == "" and panel.focused == [4242, 4242]
+
+
+def _press(widget):
+    from PySide6.QtCore import QEvent, QPointF, Qt
+    from PySide6.QtGui import QMouseEvent
+    QtWidgets.QApplication.sendEvent(widget, QMouseEvent(QEvent.MouseButtonPress, QPointF(5, 5), QPointF(5, 5),
+                                                         Qt.LeftButton, Qt.LeftButton, Qt.NoModifier))
+
+
+def test_panel_never_takes_foreground_except_for_typing(panel):
+    """移植 upstream 1.1.9：图标、详情都设「不激活」（WS_EX_NOACTIVATE），点了键盘仍归游戏——
+    游戏丢一次前台再拿回来，Windows 可能改成合成显示、锁帧。只有点进搜索框时详情才临时能当前台。"""
+    p, styles = panel.p, panel.styles
+    icon, body = int(p.winId()), int(p.body_win.winId())
+    p.hide()
+    p.show()
+    assert styles[icon] is True
+    p.btn.click()
+    panel.app.processEvents()
+    assert p.expanded and styles[body] is True
+    panel.focused.clear()
+    _press(p.search)
+    assert styles[body] is False and panel.focused == [body]  # 能打字了
+    p.search.setText("提莫")
+    p._search_pick()
+    panel.app.processEvents()
+    assert styles[body] is True and styles[icon] is True and panel.focused[-1] == 4242
+
+
+def test_typing_ends_when_player_clicks_back_to_game(panel):
+    """搜索中途直接点回游戏，详情马上改回不抢前台（只改样式，不抢回前台）；之后点候选也不再切前台。"""
+    from PySide6.QtCore import QEvent
+    p, styles = panel.p, panel.styles
+    body = int(p.body_win.winId())
+    panel.fg[0] = 4242  # 新做法：点图标后前台还是游戏
+    p.btn.click()
+    panel.app.processEvents()
+    panel.focused.clear()
+    _press(p.search)
+    assert styles[body] is False and panel.focused == [body] and p._typing_on
+    panel.fg[0] = 4242  # 玩家点回游戏
+    QtWidgets.QApplication.sendEvent(p.body_win, QEvent(QEvent.WindowDeactivate))
+    panel.app.processEvents()
+    assert styles[body] is True and not p._typing_on and panel.focused == [body]
+    p._set_candidates([{"id": "17", "name": "提莫"}])
+    p.cands.itemAt(0).widget().click()
+    panel.app.processEvents()
+    assert p.engine.picked == ["17"] and panel.focused == [body]  # 前台本来就在游戏：不再请求切换
+
+
+def test_typing_not_started_when_windows_refuses_foreground(panel, monkeypatch):
+    p, styles = panel.p, panel.styles
+    body = int(p.body_win.winId())
+    panel.fg[0] = 4242
+    monkeypatch.setattr(panel.overlay.win, "give_focus", panel.focused.append)  # 请求了，前台没换
+    p.btn.click()
+    panel.app.processEvents()
+    _press(p.search)
+    assert styles[body] is True and not p._typing_on
+
+
+def test_typing_window_style_is_restored_on_the_next_placement(panel):
+    """正在打字的详情保持可激活；打完（还焦点）后两个窗口都回到不激活。"""
+    p, styles = panel.p, panel.styles
+    icon, body = int(p.winId()), int(p.body_win.winId())
+    rect = panel.overlay.win.Rect(0, 0, 1280, 720)
+    p.toggle()
+    p.place(rect)
+    assert styles == {icon: True, body: True}
+    panel.fg[0] = 4242
+    _press(p.search)
+    p.place(rect)
+    assert styles == {icon: True, body: False}  # 打字中：详情先不改
+    p.give_back_focus()
+    panel.app.processEvents()
+    assert styles == {icon: True, body: True} and panel.focused[-1] == 4242
+
+
+def test_give_back_skipped_when_player_is_in_another_app(panel):
+    """点候选、重新识别时前台不是浮窗（在游戏或别的程序）就不请求切前台；目标换了也不还。"""
+    p = panel.p
+    panel.focused.clear()
+    panel.fg[0] = 777  # 别的程序
+    p._link("rescan")
+    panel.app.processEvents()
+    assert panel.focused == []
+    panel.fg[0] = int(p.winId())
+    p.give_back_focus()
+    p.target_hwnd = 5151  # 还没还就换了目标
+    panel.app.processEvents()
+    assert panel.focused == []
+    p.give_back_focus()
+    panel.app.processEvents()
+    assert panel.focused == [5151]
 
 
 @pytest.mark.parametrize("w,h", [(1024, 576), (1280, 720), (1600, 900), (1920, 1080)])

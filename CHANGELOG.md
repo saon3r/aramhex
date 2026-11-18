@@ -1,5 +1,11 @@
 # Changelog
 
+## 1.1.6
+
+- New augments are recognised on the English client as soon as they appear in the stats, without waiting for an app release. The app now uses the English names it downloads from CommunityDragon for any augment its built-in name table lacks, and fetches them right after new stats arrive instead of up to six hours later. Patch 16.22's One Hit Wonder, RISE, Slime Time, Steadfaster Presence, Mystic Guard and Fortified are also added to the built-in table.
+- Clicking the in-game assistant icon or its details panel no longer takes keyboard focus away from the game. Upstream found that losing and regaining focus can leave the game frame-locked. The panel takes focus only while you type in the champion search box and hands it back when you pick, press Esc or click back into the game. This ports upstream 1.1.9's fix, without its remote on/off switch.
+- No new network hosts, no telemetry and no change to card recognition itself.
+
 ## 1.1.5
 
 - Augment badges now hide when another program is in the foreground (for example after Alt-Tab) and come back as soon as the game is focused again. Clicking the assistant's own panel does not hide them.
