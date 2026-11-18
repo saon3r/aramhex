@@ -27,7 +27,16 @@ highlighted, weak cards say so, and a reroll updates the badges.
 | Goredrink | Viable | 57.6% |
 | Snowday | Consider reroll | 50.0% |
 
-The overlay never takes a click, never grabs focus, and disappears when the moment passes.
+The badges are click-through and disappear when the moment passes. The small AramHex icon in
+the top-right corner opens the details panel. Clicking it never takes the keyboard away from
+the game, and it is hidden whenever League is not the window in front.
+
+## Using it
+
+Start AramHex before you queue. It lives in the system tray, and its icon appears on top of
+the League client and the game, then finds champion select and the augment screen by
+itself. If it cannot tell which champion you are playing, click the icon and search for
+your champion. Close it from the tray icon.
 
 ## Install
 
@@ -45,8 +54,13 @@ To upgrade a portable copy, extract the new ZIP beside the old folder, copy the 
 `userdata` folder into the new one, and only then delete the old folder. `userdata` holds your
 settings, logs and downloaded statistics — deleting it loses all three.
 
-Either way, the first launch downloads the statistics (a few seconds). After that it works
-offline.
+To upgrade an installed copy, run the new installer. It replaces the old version and keeps
+your settings.
+
+Either way, the app ships with a recent statistics snapshot and works offline from the first
+launch. When it is online it checks for newer statistics every few hours. With automatic
+updates switched off in settings, it still checks, but it only offers the new statistics
+and does not download them until you agree.
 
 Windows will show **"Windows protected your PC"** on first run, because the build is not
 code-signed. Click *More info* → *Run anyway*.
@@ -71,12 +85,16 @@ telemetry of any kind.
 
 ## Honest limitations
 
-**The statistics are the Chinese server's.** Riot blocks ARAM: Mayhem in their public API,
-so nobody has EUW data — every site showing "Mayhem stats" is either borrowing Arena numbers
-or crawling the client. This build bundles 5,376,732 real Mayhem games (about 5.38M) from
-seven CN regions, collected on patch 16.21; the app refreshes them from the stats feed when
-it can but does not promise to always be on the newest patch. Champion strength differs by
+**The statistics are the Chinese server's.** They come from tens of millions of real Mayhem
+games on seven Chinese regions, published by
+[`czgreat/aramhex-data`](https://github.com/czgreat/aramhex-data); there is no comparable
+public source for EUW. The app shows which patch and how many games it is using, and it
+follows the newest patch as soon as the feed publishes it. Champion strength differs by
 region; augment strength travels better. Everything in the app is labelled accordingly.
+
+**New augments are picked up automatically.** When a patch adds augments, the app downloads
+their English names together with the new statistics, so it can recognise them without an
+app update.
 
 **The augment screen's layout is measured against the current UI.** Sustained recognition
 failure now produces one warning per game when the app can independently detect all three
