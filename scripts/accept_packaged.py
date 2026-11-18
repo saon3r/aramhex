@@ -10,7 +10,8 @@ ARAMHEX_ACCEPT_HOME 指到别的目录。
 Checks, in order:
   1. the self-test inside the frozen app (Qt, OCR, English chrome, fixture -> 3 badges,
      and that every loaded lolhex module came from the install directory, not the repo);
-  2. a warmed-cache start with updates disabled: stays up, opens no TCP connections;
+  2. a warmed-cache start with updates disabled: stays up, opens no TCP connections other than
+     the one stats-manifest read that offers newer stats (owner decision, 18 Nov 2026);
   3. a start that is meant to fail: the English crash dialog appears, then is closed;
   4. a start with a client language whose recognizer pack is missing: the log says so.
 
@@ -24,6 +25,7 @@ import ctypes
 import json
 import os
 import shutil
+import socket
 import subprocess
 import sys
 import time
@@ -87,12 +89,31 @@ def warmed_home(name: str, *, disable_updates: bool = True, game_lang: str | Non
     return home
 
 
-def tcp_connections(pid: int) -> list:
+# Owner decision (18 Nov 2026): with automatic stats updates off, the app still reads the
+# stats manifest once so it can *offer* newer stats. That read is allowed; every other
+# connection on a warmed, updates-off start is a failure.
+OFFER_CHECK_HOSTS = ("aramhex.com", "raw.githubusercontent.com")
+
+
+def tcp_connections(pid: int) -> list[tuple[str, str]]:
+    """(remote address, state) for each TCP connection the process owns."""
     out = subprocess.run(["powershell", "-NoProfile", "-Command",
                           f"Get-NetTCPConnection -OwningProcess {pid} -ErrorAction SilentlyContinue "
-                          f"| Select-Object -ExpandProperty State"],
+                          "| ForEach-Object { $_.RemoteAddress + ' ' + $_.State }"],
                          capture_output=True, text=True).stdout
-    return [line.strip() for line in out.splitlines() if line.strip()]
+    return [tuple(line.split(None, 1)) for line in out.splitlines() if len(line.split(None, 1)) == 2]
+
+
+def offer_check_addresses() -> set[str]:
+    """Current addresses of the stats-manifest hosts (resolved here, by the acceptance script)."""
+    found: set[str] = set()
+    for host in OFFER_CHECK_HOSTS:
+        try:
+            for info in socket.getaddrinfo(host, 443, proto=socket.IPPROTO_TCP):
+                found.add(info[4][0])
+        except OSError:
+            pass
+    return found
 
 
 def run_and_wait(exe: Path, args: list[str], env: dict, seconds: float) -> subprocess.Popen:
@@ -184,7 +205,10 @@ def main() -> int:
     log = home / "aramhex.log"
     log_text = log.read_text(encoding="utf-8", errors="replace") if log.exists() else ""
     record("warmed start stays up", alive, f"pid {proc.pid}")
-    record("warmed start opens no TCP connections", connections == [], str(connections))
+    offer_addresses = offer_check_addresses()
+    unexpected = [c for c in connections if c[0] not in offer_addresses]
+    record("warmed start opens no TCP connections beyond the stats-offer check", unexpected == [],
+           f"unexpected={unexpected} all={connections}")
     record("warmed start logs the OCR engine", "Windows.Media.Ocr" in log_text)
     # 英雄头像库是从缓存的 static.json 建的：173 个就说明缓存数据集读到了（应用不打印 dataset= 行）
     record("warmed start reads the cached dataset", "173" in log_text, "icon bank from cached static.json")
