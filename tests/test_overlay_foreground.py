@@ -42,9 +42,7 @@ def fake_overlay(monkeypatch, snap=None):
     ov.badges = ov_module.BadgeLayer()
     ov.champ = SimpleNamespace(update_from=lambda *a: None)
     ov.autoshot = SimpleNamespace(tick=lambda *a: None)
-    ov.panel = SimpleNamespace(update_from=lambda *a: None, auto_hide=lambda *a: None,
-                               isVisible=lambda: True, place=lambda *a, **k: None,
-                               target_hwnd=0)
+    ov.panel = _Panel()
     return SimpleNamespace(ov=ov, state=state, win=win, snap=snap)
 
 
@@ -90,6 +88,58 @@ def test_no_offer_hides_badges_even_in_foreground(app, monkeypatch):
         o.state["fg"] = 333
         o.ov._tick()
         assert not o.ov.badges.isVisible()
+    finally:
+        o.ov.badges.close()
+        app.processEvents()
+
+
+class _Panel:
+    """右上角浮窗的替身：只记显示/隐藏和摆放。"""
+
+    def __init__(self):
+        self.shown, self.placed, self.target_hwnd = False, [], 0
+
+    def update_from(self, *_a):
+        pass
+
+    def auto_hide(self, *_a):
+        pass
+
+    def isVisible(self):
+        return self.shown
+
+    def show(self):
+        self.shown = True
+
+    def hide(self):
+        self.shown = False
+
+    def place(self, rect, in_client=False):
+        self.placed.append((rect, in_client))
+
+
+@pytest.mark.parametrize("where", ["game", "client"])
+def test_icon_only_shows_while_league_is_in_front(app, monkeypatch, where):
+    # 用户 11-18：游戏或客户端不在前台（切到浏览器、聊天）时，右上角图标也不该浮在别的程序上
+    o = fake_overlay(monkeypatch)
+    if where == "client":  # 大厅/选英雄：没有游戏窗口，跟随客户端
+        monkeypatch.setattr(o.win, "find_game_window", lambda: 0)
+        monkeypatch.setattr(o.win, "find_client_window", lambda: 111)
+    o.ov.panel = panel = _Panel()
+    try:
+        o.ov._tick()
+        assert panel.shown and panel.placed[-1][1] is (where == "client")
+        assert panel.target_hwnd == 111   # 点完浮窗仍把焦点还给它
+        o.state["fg"] = 333  # 切到别的程序
+        o.ov._tick()
+        assert not panel.shown
+        o.win.add_companion(222)
+        o.state["fg"] = 222  # 正在用自己的浮窗（详情、搜英雄）：不算离开
+        o.ov._tick()
+        assert panel.shown
+        o.state["fg"] = 111  # 切回来马上显示
+        o.ov._tick()
+        assert panel.shown
     finally:
         o.ov.badges.close()
         app.processEvents()

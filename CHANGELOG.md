@@ -1,5 +1,9 @@
 # Changelog
 
+## 1.1.7
+
+- The floating assistant icon now hides when League is not the window in front (for example after Alt-Tab to a browser or chat), the same way the augment badges already did, and comes back as soon as you return to the game or client. Using the assistant's own details panel or champion search does not hide it.
+
 ## 1.1.6
 
 - New augments are recognised on the English client as soon as they appear in the stats, without waiting for an app release. The app now uses the English names it downloads from CommunityDragon for any augment its built-in name table lacks, and fetches them right after new stats arrive instead of up to six hours later. Patch 16.22's One Hit Wonder, RISE, Slime Time, Steadfaster Presence, Mystic Guard and Fortified are also added to the built-in table.
