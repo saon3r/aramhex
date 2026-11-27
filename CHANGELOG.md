@@ -1,5 +1,13 @@
 # Changelog
 
+## 1.1.8
+
+- Added a **Background** button at the bottom right of the in-game details panel to cycle between **Transparent**, **Semi-transparent**, and **Opaque**, saved automatically so text stays readable over bright map areas.
+- Typing in the in-game champion search box (or using its autocomplete dropdown) no longer hides the overlay or drops focus while League is behind it.
+- *Weapon of Destiny* item hints now show build styles (`AP`, `AD`, `Tank`, `Support`) for champions whose patch 16.23 recommendations are split by build path.
+- Hardened Windows 64-bit window-handle calls, atomic settings saves, and interrupted stats-update recovery.
+- Synced the **Start with Windows** checkbox between the tray menu and Settings, and added an error notice if toggling it from the tray fails.
+
 ## 1.1.7
 
 - The floating assistant icon now hides when League is not the window in front (for example after Alt-Tab to a browser or chat), the same way the augment badges already did, and comes back as soon as you return to the game or client. Using the assistant's own details panel or champion search does not hide it.

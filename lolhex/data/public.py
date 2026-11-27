@@ -226,6 +226,20 @@ def load_best(folders: list[tuple[Path, str]]) -> Dataset | None:
     return best
 
 
+def _cached_folders(dest: Path) -> list[tuple[Path, str]]:
+    """切换中断后，现用目录可能还没就位，先用保留下来的上一个版本（移植 upstream 1.3.0）。"""
+    if dest.exists():
+        return [(dest, "downloaded")]
+    out = []
+    old = dest.with_name(dest.name + ".old")
+    if old.exists():
+        out.append((old, "downloaded"))
+    prefix = dest.name + ".previous-"
+    out.extend((folder, "downloaded") for folder in sorted(dest.parent.glob(prefix + "*"), reverse=True)
+               if folder.name.removeprefix(prefix).isdecimal())
+    return out
+
+
 PACK_FORMAT = "aramhex-pack-1"
 
 
@@ -316,10 +330,15 @@ def download(base_url: str, manifest: dict, dest: Path, timeout: float = 30, pro
         (tmp / "latest.json").write_text(json.dumps(manifest, ensure_ascii=False), encoding="utf-8")
         Dataset(tmp, "downloaded")  # 整份再核一遍
         old = dest.with_name(dest.name + ".old")
-        shutil.rmtree(old, ignore_errors=True)
         if dest.exists():
+            shutil.rmtree(old, ignore_errors=True)
             dest.rename(old)
-        tmp.rename(dest)
+        try:
+            tmp.rename(dest)
+        except OSError:
+            if not dest.exists() and old.exists():
+                old.rename(dest)
+            raise
         shutil.rmtree(old, ignore_errors=True)
     except BaseException:
         shutil.rmtree(tmp, ignore_errors=True)
@@ -359,7 +378,7 @@ class PublicStore(DataStore):
 
     def reload_dataset(self) -> bool:
         """重新挑选数据；换了一份返回 True。换数据后把已验证的静态表并进本地种子。"""
-        ds = load_best([(self.downloaded, "downloaded"), (self.bundled, "bundled")])
+        ds = load_best(_cached_folders(self.downloaded) + [(self.bundled, "bundled")])
         with self._lock:
             changed = ds is not None and (self.dataset is None or ds.revision != self.dataset.revision)
             if changed or ds is None:
@@ -680,6 +699,9 @@ class PublicStore(DataStore):
         rows, label = self._hero_rows("hero_items.json", hero_id)
         return [{"item": r["key"], "games": r["games"], "win": r["win"]} for r in rows], label
 
+    # 16.23 命运之武器（3081）按出装流派分行的映射：中文标签转内部码，界面走目录显示英文；「不拆」表示不加前缀。
+    _DESTINY_STYLES = {"AD": "ad", "AP": "ap", "坦克": "tank", "辅助": "support", "不拆": None}
+
     def augment_items(self, hero_id: str, augment_id: str) -> dict | None:
         """按英雄、海克斯配置的装备建议；独立于普通出装统计，保持数据提供的顺序。"""
         if not self.dataset:
@@ -692,12 +714,19 @@ class PublicStore(DataStore):
         raw = cfg.get("items")
         if not isinstance(raw, list):
             return None
+        by_style = str(augment_id) == "3081" and cfg.get("recommendation_style") == "destiny_style_v1"
         rows, seen = [], set()
         for x in raw:
             if not isinstance(x, dict):
                 continue
             iid = str(x.get("item") or "")
-            if not iid.isascii() or not iid.isdigit() or len(iid) > 6 or iid in seen:
+            if not iid.isascii() or not iid.isdigit() or len(iid) > 6:
+                continue
+            raw_style = x.get("style") if by_style else None
+            if by_style and raw_style not in self._DESTINY_STYLES:
+                continue
+            identity = raw_style if by_style else iid
+            if identity in seen:
                 continue
             meta = self.items.get(iid) or {}
             name = meta.get("name") or x.get("name")
@@ -707,9 +736,14 @@ class PublicStore(DataStore):
             if (g is not None or w is not None) and not (type(g) is int and g > 0 and type(w) is int and 0 <= w <= g):
                 continue
             show = cfg.get("show_winrate", True) is True and x.get("show_winrate", True) is True
-            rows.append({"item": iid, "name": name[:24], "icon": meta.get("icon"),
-                         "games": g, "win": w / g if show and g else None})
-            seen.add(iid)
+            row = {"item": iid, "name": name[:24], "icon": meta.get("icon"),
+                   "games": g, "win": w / g if show and g else None}
+            if by_style:
+                style = self._DESTINY_STYLES[raw_style]
+                if style is not None:
+                    row["style"] = style
+            rows.append(row)
+            seen.add(identity)
             if len(rows) == 3:  # 卡片另一侧的空位只放三行；人工推荐的先后顺序不重排
                 break
         return {"source": cfg["source"], "items": rows} if rows else None

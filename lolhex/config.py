@@ -12,12 +12,43 @@ import logging
 import os
 import re
 import sys
+import tempfile
 import threading
 import time
 from dataclasses import asdict, dataclass, field, fields
 from pathlib import Path
 
+
+def atomic_write_text(path: Path, text: str) -> None:
+    """在同一目录写入并同步临时文件，再原子替换目标（移植 upstream 1.3.0）。"""
+    path.parent.mkdir(parents=True, exist_ok=True)
+    temp = None
+    try:
+        with tempfile.NamedTemporaryFile(mode="w", encoding="utf-8", dir=path.parent,
+                                         prefix=path.name + ".", suffix=".tmp", delete=False) as stream:
+            temp = Path(stream.name)
+            stream.write(text)
+            stream.flush()
+            os.fsync(stream.fileno())
+        for attempt in range(4):
+            try:
+                os.replace(temp, path)
+                return
+            except PermissionError:
+                if sys.platform != "win32" or attempt == 3:
+                    raise
+                time.sleep(0.02 * (attempt + 1))
+    finally:
+        if temp is not None:
+            try:
+                temp.unlink(missing_ok=True)
+            except OSError:
+                pass
+
+
 APP_DIR_NAME = "AramHex"
+# 详情的背景（移植 upstream 1.2.0，只在详情里点按钮换）：透明 = 原来的样子 / 半透明 / 不透明
+OVERLAY_BGS = ("standard", "dark", "solid")
 # 去掉的设置项：老设置文件里有也不再写回（1.1.1 删了 2999 接口；浮窗不再对截图隐身，录屏开关也删了；
 # 自动截图只是调试用，设置页去掉，只在调试模式（debug.txt）下截）。
 # 1.1.1 去掉了安装编号、匿名使用统计、上传日志记录、云控强制值和查分：老文件里的这些键读到时丢弃，不再生成、保存或发出去。
@@ -96,6 +127,8 @@ class Settings:
     overlay: bool = True
     # 悬浮按钮的位置：top-right / top-left。
     overlay_corner: str = "top-right"
+    # 详情的背景（见 OVERLAY_BGS）：standard / dark / solid。只改右上角详情，三选一标签不变。
+    overlay_bg: str = "standard"
     # 三选一标签放在卡片哪里：top=标题上方（压在图标下半，默认）/ bottom=描述下面的空白处。
     badge_position: str = "top"
     # 参考数据的分数段：""=全体（默认），casual/mid/high=娱乐/中分/前 5%（1.1.0 以前的 top 读到当 high）。
@@ -143,6 +176,8 @@ class Settings:
         s.show_winrate = True
         if s.data_band == "top":
             s.data_band = "high"  # 1.1.1 去掉「顶尖」，和「高分」合成「前 5%」
+        if s.overlay_bg not in OVERLAY_BGS:
+            s.overlay_bg = "standard"  # 手改坏了：回到默认透明
         if broken:
             # 实在读不懂：原文件留个备份，后面照常写新的
             s.seen_welcome = True  # 不是新装，别再弹欢迎框
@@ -171,10 +206,7 @@ class Settings:
             data.update(extra)
             text = json.dumps(data, ensure_ascii=False, indent=2)
             try:
-                # 先写临时文件再换过去：两个线程同时存、或者写到一半断电，都不会留下写坏的设置文件
-                tmp = path.with_name(path.name + ".tmp")
-                tmp.write_text(text, encoding="utf-8")
-                os.replace(tmp, path)
+                atomic_write_text(path, text)
                 return True
             except OSError as e:
                 logging.getLogger(__name__).warning("设置文件写不进去：%s", e)

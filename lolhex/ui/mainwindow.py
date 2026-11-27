@@ -82,6 +82,13 @@ def _pct(x) -> str:
     return "—" if x is None else f"{x * 100:.1f}%"
 
 
+def _set_checked_quietly(widget, on: bool) -> None:
+    """改勾选状态但不触发 toggled（两处「开机自动启动」互相同步时用）。"""
+    old = widget.blockSignals(True)
+    widget.setChecked(on)
+    widget.blockSignals(old)
+
+
 def _progress_bar() -> QProgressBar:
     bar = QProgressBar()
     bar.setTextVisible(True)
@@ -432,12 +439,21 @@ class MainWindow(QMainWindow):
         try:
             autostart.set_enabled(self.set_auto.isChecked())
         except OSError as e:
+            self.sync_autostart()
             QMessageBox.warning(self, tr("dialog.autostart.title"),
                                 tr("dialog.autostart.failed", error=escape(str(e))))
+        tray = getattr(self, "tray", None)
+        if tray is not None:
+            tray.sync_autostart()
         if saved:
             QMessageBox.information(self, tr("common.settings"), tr("dialog.save.ok"))
         else:
             QMessageBox.warning(self, tr("common.settings"), tr("dialog.save.failed"))
+
+    def sync_autostart(self) -> None:
+        """设置页「开机自动启动」按注册表的实际状态重新显示（托盘改了、写失败时）。"""
+        if hasattr(self, "set_auto"):
+            _set_checked_quietly(self.set_auto, autostart.is_enabled())
 
     def _recalibrate(self):
         self.engine.reset_calibration()
@@ -634,6 +650,7 @@ class Tray(QSystemTrayIcon):
         self.act_auto.setChecked(autostart.is_enabled())
         self.act_auto.toggled.connect(self._toggle_auto)
         m.addAction(self.act_auto)
+        m.aboutToShow.connect(self.sync_autostart)  # 设置页、别的程序改过注册表：打开菜单时按实际状态显示
         m.addSeparator()
         m.addAction(tr("common.quit"), self.quit)
         self.setContextMenu(m)
@@ -653,11 +670,18 @@ class Tray(QSystemTrayIcon):
         s.save()
         self.overlay.set_visible(s.overlay)
 
+    def sync_autostart(self) -> None:
+        _set_checked_quietly(self.act_auto, autostart.is_enabled())
+
     def _toggle_auto(self, on: bool):
         try:
             autostart.set_enabled(on)
-        except OSError:
-            pass
+        except OSError as e:
+            self.sync_autostart()
+            self.showMessage(tr("dialog.autostart.title"),
+                             tr("dialog.autostart.failed", error=str(e)), app_icon(), 6000)
+        if hasattr(self.window, "sync_autostart"):
+            self.window.sync_autostart()
 
     def _tooltip(self):
         s = self.engine.snapshot()

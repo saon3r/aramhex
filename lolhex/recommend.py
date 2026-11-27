@@ -227,7 +227,8 @@ def evaluate(store, hero_id: str | None, slots: list[str | None], k: int = 300) 
     # 排名只在正式服统计、样本足够的海克斯之间排：测试服的新海克斯不是同一个版本的数据，只显示测试服胜率、不排名；
     # 剔除的和样本太少的都不参与。4.0 删掉的海克斯过渡数据里已经去掉，名次的分母跟着变
     blend = band_blend(store, hero_id, ag, k)
-    rank_src = ({aid: {"win": (ag["sample_win"] + v["delta"] / 100), "games": v["games_all"]} for aid, v in blend.items()}
+    rank_src = ({aid: {"win": max(0.0, min(1.0, ag["sample_win"] + v["delta"] / 100)),
+                       "games": v["games_all"]} for aid, v in blend.items()}
                 if blend is not None else ag_augs)
     ranks_by_win = win_ranks({aid: s for aid, s in rank_src.items()
                               if aid not in provisional and aid not in excluded and _supported(s.get("games"))},
